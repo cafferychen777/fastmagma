@@ -1,0 +1,9 @@
+include LICENSE README.md CHANGELOG.md
+recursive-include src *.py
+recursive-include docs *.md *.png
+recursive-include scripts *.py
+recursive-include examples *.sbatch
+recursive-include tests *.py
+recursive-include benchmarks *.py
+prune build
+prune dist
