@@ -5,7 +5,8 @@
 - Move quadrature callbacks to portable C extensions while retaining the same
   integration formulas, tolerances, diagnostics, and fallback rules.
 - Share a bounded exact-node cache between sine and cosine quadrature callbacks,
-  avoiding repeated spectrum calculations without interpolation.
+  avoiding repeated spectrum calculations without interpolation. Retry original
+  callbacks at identical tolerances if cached quadrature fails its error check.
 - Filter plain GWAS inputs by reference SNP in a native streaming pass before
   constructing numeric-column strings; retain the general parser for unusual
   tables and preserve ordered input QC.

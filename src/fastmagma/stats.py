@@ -155,34 +155,38 @@ def tilted_logsf(q, lam):
     h = t * sd
     beta = 2 * lam / denominator / sd
     exponent = -0.5 * np.log(denominator).sum() - t * q
-    cosine_callback, sine_callback = _native.tilted_integrands(beta, h)
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", IntegrationWarning)
-        cosine, ce = integrate.quad(
-            LowLevelCallable(cosine_callback),
-            0,
-            np.inf,
-            weight="cos",
-            wvar=q / sd,
-            epsabs=1e-12,
-            limlst=200,
-            limit=200,
+    # A last-bit change can destabilize QUADPACK's extrapolation error estimate.
+    # Retry its original single-component callbacks before leaving this exact
+    # integration route; both attempts use identical tolerances and tilt.
+    for cached in (True, False):
+        callbacks = (
+            _native.tilted_integrands(beta, h)
+            if cached
+            else (
+                _native.tilted_integrand(beta, h, False),
+                _native.tilted_integrand(beta, h, True),
+            )
         )
-        sine, se = integrate.quad(
-            LowLevelCallable(sine_callback),
-            0,
-            np.inf,
-            weight="sin",
-            wvar=q / sd,
-            epsabs=1e-12,
-            limlst=200,
-            limit=200,
-        )
-    value, error = cosine + sine, ce + se
-    if not np.isfinite(value) or value <= 0 or not np.isfinite(error) or error > 1e-7 * value:
-        raise NumericalError("Tilted integration did not meet its error criterion")
-    return exponent + math.log(value / math.pi)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", IntegrationWarning)
+            components = [
+                integrate.quad(
+                    LowLevelCallable(callback),
+                    0,
+                    np.inf,
+                    weight=weight,
+                    wvar=q / sd,
+                    epsabs=1e-12,
+                    limlst=200,
+                    limit=200,
+                )
+                for callback, weight in zip(callbacks, ("cos", "sin"))
+            ]
+        value = components[0][0] + components[1][0]
+        error = components[0][1] + components[1][1]
+        if np.isfinite(value) and value > 0 and np.isfinite(error) and error <= 1e-7 * value:
+            return exponent + math.log(value / math.pi)
+    raise NumericalError("Tilted integration did not meet its error criterion")
 
 
 def _saddlepoint(q, lam):

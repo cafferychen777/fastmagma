@@ -69,6 +69,10 @@ static double tilted_component(double v, void *data) {
     phase *= 0.5;
     const double s = sin(phase);
     const double c = cos(phase);
+    if (node == NULL) {
+        const double numerator = context->sine ? h * s - v * c : h * c + v * s;
+        return exp(-0.25 * log_amplitude) * numerator / (h * h + v * v);
+    }
     const double amplitude = exp(-0.25 * log_amplitude);
     const double denominator = h * h + v * v;
     const double cosine = amplitude * (h * c + v * s) / denominator;

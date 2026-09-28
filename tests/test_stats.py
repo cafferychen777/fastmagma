@@ -393,3 +393,46 @@ def test_shared_node_cache_survives_releasing_either_callback():
         del callbacks
         gc.collect()
         assert integrate.quad(survivor, 0, 1)[0] == expected
+
+
+def test_tilted_retries_original_callbacks_without_relaxing_error_gate(monkeypatch):
+    calls = []
+
+    def quadrature(callback, *args, **kwargs):
+        calls.append(kwargs)
+        return (0.4, 1e-3 if len(calls) <= 2 else 1e-12)
+
+    monkeypatch.setattr(stats.integrate, "quad", quadrature)
+    assert np.isfinite(stats.tilted_logsf(5, np.array([1.0, 0.4, 0.1])))
+    assert len(calls) == 4
+    assert calls[:2] == calls[2:]
+    calls.clear()
+    monkeypatch.setattr(stats.integrate, "quad", lambda *args, **kwargs: (0.4, 1e-3))
+    with pytest.raises(stats.NumericalError, match="error criterion"):
+        stats.tilted_logsf(5, np.array([1.0, 0.4, 0.1]))
+
+
+def test_real_ad_tail_near_quadpack_extrapolation_instability():
+    # Independent 80-digit de Hoog and Talbot inversion of the retained spectrum.
+    # On Linux, cached callback rounding can inflate QUADPACK's error estimate;
+    # the original callbacks recover the same tail without changing tolerances.
+    lam = [
+        0.0016124710704089646,
+        0.005457204090602929,
+        0.03354473802116111,
+        1.2349970227636562,
+        4.724388564054172,
+    ]
+    q = sum(
+        [
+            0.061163079954970175,
+            0.46487587347256143,
+            0.43440163332845005,
+            0.0010868151115027607,
+            2.2643119140125334,
+            0.00011813416527445519,
+        ]
+    )
+    result = stats.gene_test(q, lam)
+    assert result.method == "tilted_imhof"
+    assert result.p == pytest.approx(0.5418722556973208, rel=0, abs=2e-12)

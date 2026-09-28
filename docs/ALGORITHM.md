@@ -115,7 +115,9 @@ accurate integration; its method label records the block numerical methods.
    cosine components, and use QUADPACK's weighted Fourier integrator. This
    avoids subtracting two values near one half in the upper tail. Accept only
    finite positive integrals with summed estimated relative error <= 1e-7.
-   QUADPACK's estimates are diagnostics, not rigorous bounds.
+   QUADPACK's estimates are diagnostics, not rigorous bounds. If the cached
+   callbacks fail this check, retry the original single-component callbacks
+   at the same tilt and tolerances before trying another integration route.
 5. If tilted integration fails its criterion, try ordinary Imhof integration
    in the bulk. Accept only when `1e-6 < P < 1` and estimated relative error
    is below 1e-4. A positive-tilt Chernoff bound below 1e-6 skips this ordinary
