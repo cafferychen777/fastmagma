@@ -73,18 +73,23 @@ static PyObject *filter_pval(PyObject *self, PyObject *args) {
     if (!PyArg_ParseTuple(args, "OOO:filter_pval", &source_obj, &snps, &destination_obj)) return NULL;
     if (!PyUnicode_FSConverter(source_obj, &source) ||
         !PyUnicode_FSConverter(destination_obj, &destination)) goto cleanup;
-    identifiers = PySet_New(NULL);
-    iterator = PyObject_GetIter(snps);
-    if (!identifiers || !iterator) goto cleanup;
-    while ((item = PyIter_Next(iterator))) {
-        PyObject *encoded = PyUnicode_AsUTF8String(item);
-        Py_CLEAR(item);
-        if (!encoded) goto cleanup;
-        int added = PySet_Add(identifiers, encoded);
-        Py_DECREF(encoded);
-        if (added < 0) goto cleanup;
+    int shared_index = PyDict_Check(snps);
+    if (shared_index) {
+        identifiers = Py_NewRef(snps);
+    } else {
+        identifiers = PySet_New(NULL);
+        iterator = PyObject_GetIter(snps);
+        if (!identifiers || !iterator) goto cleanup;
+        while ((item = PyIter_Next(iterator))) {
+            PyObject *encoded = PyUnicode_AsUTF8String(item);
+            Py_CLEAR(item);
+            if (!encoded) goto cleanup;
+            int added = PySet_Add(identifiers, encoded);
+            Py_DECREF(encoded);
+            if (added < 0) goto cleanup;
+        }
+        if (PyErr_Occurred()) goto cleanup;
     }
-    if (PyErr_Occurred()) goto cleanup;
     input = open_path(source, "rb");
     if (!input) {
         if (!PyErr_Occurred()) PyErr_SetFromErrnoWithFilenameObject(PyExc_OSError, source_obj);
@@ -132,9 +137,11 @@ static PyObject *filter_pval(PyObject *self, PyObject *args) {
             if (fields != header_fields || !snp) goto fallback;
             rows++;
             if ((rows & 65535) == 0 && PyErr_CheckSignals() < 0) goto cleanup;
-            PyObject *key = PyBytes_FromStringAndSize(snp, (Py_ssize_t)snp_length);
+            PyObject *key = shared_index
+                ? PyUnicode_DecodeASCII(snp, (Py_ssize_t)snp_length, NULL)
+                : PyBytes_FromStringAndSize(snp, (Py_ssize_t)snp_length);
             if (!key) goto cleanup;
-            int present = PySet_Contains(identifiers, key);
+            int present = shared_index ? PyDict_Contains(identifiers, key) : PySet_Contains(identifiers, key);
             Py_DECREF(key);
             if (present < 0) goto cleanup;
             if (!present) continue;
@@ -165,7 +172,70 @@ cleanup:
     return result;
 }
 
+/* CPython's locale-independent converter is also used by float(str). Requiring
+ * the complete ASCII-trimmed token rejects underscores and hexadecimal forms. */
+static PyObject *parse_numeric(PyObject *self, PyObject *args) {
+    PyObject *values, *destination, *iterator = NULL, *item = NULL;
+    Py_buffer output = {0};
+    Py_ssize_t index = 0;
+    (void)self;
+    if (!PyArg_ParseTuple(args, "OO:parse_numeric", &values, &destination)) return NULL;
+    if (PyObject_GetBuffer(destination, &output, PyBUF_WRITABLE | PyBUF_FORMAT | PyBUF_ND | PyBUF_STRIDES) < 0) return NULL;
+    if (output.ndim != 1 || output.itemsize != sizeof(double) ||
+        !output.format || (strcmp(output.format, "d") && strcmp(output.format, "=d")) ||
+        !PyBuffer_IsContiguous(&output, 'C')) {
+        PyErr_SetString(PyExc_ValueError, "Output must be a contiguous writable native float64 vector");
+        goto error;
+    }
+    iterator = PyObject_GetIter(values);
+    if (!iterator) goto error;
+    while ((item = PyIter_Next(iterator))) {
+        if (index >= output.len / (Py_ssize_t)sizeof(double)) {
+            PyErr_SetString(PyExc_ValueError, "Output length differs from input length");
+            goto error;
+        }
+        Py_ssize_t length;
+        double value = Py_NAN;
+        const char *text = PyUnicode_AsUTF8AndSize(item, &length);
+        if (!text) {
+            if (!PyErr_ExceptionMatches(PyExc_UnicodeEncodeError)) goto error;
+            PyErr_Clear();
+            goto store_value;
+        }
+        const char *stop = text + length;
+        while (text < stop && space((unsigned char)*text)) text++;
+        while (stop > text && space((unsigned char)stop[-1])) stop--;
+        char *end;
+        value = PyOS_string_to_double(text, &end, NULL);
+        if (PyErr_Occurred()) {
+            if (!PyErr_ExceptionMatches(PyExc_ValueError)) goto error;
+            PyErr_Clear();
+            value = Py_NAN;
+        } else if (end != stop) {
+            value = Py_NAN;
+        }
+store_value:
+        memcpy((char *)output.buf + index * sizeof(double), &value, sizeof(double));
+        index++;
+        Py_CLEAR(item);
+    }
+    if (PyErr_Occurred()) goto error;
+    if (index != output.len / (Py_ssize_t)sizeof(double)) {
+        PyErr_SetString(PyExc_ValueError, "Output length differs from input length");
+        goto error;
+    }
+    Py_DECREF(iterator);
+    PyBuffer_Release(&output);
+    Py_RETURN_NONE;
+error:
+    Py_XDECREF(item);
+    Py_XDECREF(iterator);
+    PyBuffer_Release(&output);
+    return NULL;
+}
+
 static PyMethodDef methods[] = {
+    {"parse_numeric", parse_numeric, METH_VARARGS, "Convert decimal strings into an existing float64 vector."},
     {"filter_pval", filter_pval, METH_VARARGS, "Filter a plain whitespace table by reference SNP before numeric parsing."},
     {NULL, NULL, 0, NULL}
 };

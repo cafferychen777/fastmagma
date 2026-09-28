@@ -1,9 +1,11 @@
 """Bounded block caching and correlation spectra for PLINK reference panels."""
 
 from collections import OrderedDict
+from functools import lru_cache
 
 import numpy as np
-from scipy.linalg import eigvalsh
+from scipy.linalg.blas import dsyrk
+from scipy.linalg.lapack import dsyevr, dsyevr_lwork
 
 
 def normalize_genotypes(raw):
@@ -85,11 +87,19 @@ class GenotypeReader:
         if model not in {"magma", "whole"}:
             raise ValueError("Model must be 'magma' or 'whole'")
         indices = np.asarray(indices, dtype=np.int64)
+        blocks = indices // self.block_snps
+        numbers = np.unique(blocks)
+        if len(numbers) == 1:
+            block, whole_keep, block_missing, magma_keep = self._block(numbers[0])
+            local = indices - numbers[0] * self.block_snps
+            keep = (magma_keep if model == "magma" else whole_keep)[local]
+            local = local[keep]
+            missing = None if block_missing is None else block_missing[:, local]
+            return block[:, local], keep, missing if missing is not None and missing.any() else None
         g = np.empty((self.bed.iid_count, len(indices)), dtype=np.float64, order="F")
         keep = np.empty(len(indices), dtype=bool)
         missing = None
-        blocks = indices // self.block_snps
-        for number in np.unique(blocks):
+        for number in numbers:
             select = np.flatnonzero(blocks == number)
             local = indices[select] - number * self.block_snps
             block, block_keep, block_missing, magma_keep = self._block(number)
@@ -119,12 +129,38 @@ def workspace_bytes(n_samples, n_snps, block_snps=256):
     )
 
 
+@lru_cache(maxsize=256)
+def _eigen_workspace(size):
+    """Reuse LAPACK's optimal workspace sizes for recurring block dimensions."""
+    work, iwork, info = dsyevr_lwork(size, lower=1)
+    if info:
+        raise ValueError("Unable to determine symmetric eigenvalue workspace")
+    return int(work), iwork
+
+
+def _symmetric_eigenvalues(matrix):
+    """Compute all eigenvalues of an owned float64 matrix's lower triangle."""
+    if len(matrix) == 1:
+        return np.array([matrix[0, 0]])
+    work, iwork = _eigen_workspace(len(matrix))
+    values, _, _, _, info = dsyevr(
+        matrix, compute_v=0, lower=1, overwrite_a=1, lwork=work, liwork=iwork
+    )
+    if info < 0:
+        raise ValueError(f"Invalid symmetric eigenvalue argument {-info}")
+    if info > 0:
+        raise np.linalg.LinAlgError("Symmetric eigenvalue calculation did not converge")
+    return values
+
+
 def correlation_spectrum(g):
     """Nonzero eigenvalues of G.T @ G, choosing the smaller Gram matrix."""
     if g.ndim != 2 or min(g.shape) == 0 or not np.isfinite(g).all():
         raise ValueError("Genotypes must be a nonempty finite matrix")
-    gram = g.T @ g if g.shape[1] <= g.shape[0] else g @ g.T
-    lam = eigvalsh(gram, overwrite_a=True, check_finite=False)
+    # LAPACK consumes only one triangle. SYRK supplies it in Fortran order,
+    # avoiding the full symmetric result and the subsequent layout copy.
+    gram = dsyrk(1.0, g, trans=int(g.shape[1] <= g.shape[0]), lower=1)
+    lam = _symmetric_eigenvalues(gram)
     tolerance = np.finfo(float).eps * max(g.shape) * max(float(lam[-1]), 1.0) * 4
     if lam[0] < -tolerance:
         raise ArithmeticError("Correlation spectrum is not positive semidefinite")

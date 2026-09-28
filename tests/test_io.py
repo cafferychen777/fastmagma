@@ -363,3 +363,103 @@ def test_magma_negative_halfway_rounds_away_from_zero(tmp_path, value):
             )
     finally:
         store.close()
+
+
+def test_native_numeric_matches_previous_float_conversion():
+    import re
+    from fastmagma.io import _numeric
+
+    pattern = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?\Z")
+    tokens = [
+        "0",
+        "-0",
+        " .2\t",
+        "1e-320",
+        "4.9406564584124654e-324",
+        "1e309",
+        "+Infinity",
+        "-INF",
+        "1_0",
+        "0x1p0",
+        "1.2junk",
+        "",
+        "\x001",
+        "1\x00",
+        "nan",
+        "-NaN",
+        "NA",
+        "１２",
+        "\u00a0.2",
+        "-0.49999999999999994",
+        "50.49999999999999",
+        "50.5",
+    ]
+    rng = np.random.default_rng(126)
+    tokens += [format(value, ".17g") for value in rng.normal(size=1000)]
+    expected = []
+    for token in tokens:
+        token = token.strip(" \t\r\n\v\f")
+        expected.append(
+            float(token)
+            if pattern.fullmatch(token)
+            or token.lower() in {"inf", "+inf", "-inf", "infinity", "+infinity", "-infinity"}
+            else np.nan
+        )
+    expected = np.asarray(expected)
+    actual = _numeric(np.asarray(tokens, dtype=object))
+    np.testing.assert_array_equal(np.isnan(actual), np.isnan(expected))
+    valid = ~np.isnan(expected)
+    np.testing.assert_array_equal(actual[valid].view(np.uint64), expected[valid].view(np.uint64))
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        np.empty(2, dtype=np.float32),
+        np.empty((1, 2)),
+        np.empty(4)[::2],
+        np.empty(1),
+        np.empty(3),
+    ],
+)
+def test_native_numeric_rejects_invalid_output_buffers(output):
+    from fastmagma._input import parse_numeric
+
+    with pytest.raises(ValueError):
+        parse_numeric([".1", ".2"], output)
+
+
+def test_native_numeric_rejects_readonly_and_nonstring_inputs():
+    from fastmagma._input import parse_numeric
+
+    output = np.empty(1)
+    output.flags.writeable = False
+    with pytest.raises((ValueError, BufferError)):
+        parse_numeric([".1"], output)
+    with pytest.raises(TypeError):
+        parse_numeric([123], np.empty(1))
+    parse_numeric([], np.empty(0))
+
+
+def test_reference_filter_reuses_mapping_without_changing_rows(tmp_path):
+    from fastmagma._input import filter_pval
+
+    source = tmp_path / "input"
+    source.write_text("SNP P N\nr2 .2 100\noutside .3 100\nr1 .1 100\nr1 NA bad\n")
+    mapping = {"r1": 1, "r2": 0}
+    outputs = [tmp_path / "list", tmp_path / "mapping"]
+    assert filter_pval(source, list(mapping), outputs[0]) == 4
+    assert filter_pval(source, mapping, outputs[1]) == 4
+    assert outputs[0].read_bytes() == outputs[1].read_bytes()
+    assert mapping == {"r1": 1, "r2": 0}
+
+
+def test_native_numeric_handles_unaligned_buffers_and_surrogates():
+    from fastmagma._input import parse_numeric
+
+    backing = bytearray(17)
+    output = np.ndarray((2,), dtype=np.float64, buffer=backing, offset=1)
+    assert not output.flags.aligned
+    parse_numeric([".2", "\ud800"], output)
+    assert output[0] == 0.2
+    assert np.isnan(output[1])

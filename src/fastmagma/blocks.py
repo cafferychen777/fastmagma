@@ -10,9 +10,8 @@ from dataclasses import dataclass
 import math
 
 import numpy as np
-from scipy.linalg import eigvalsh
 
-from .genotypes import correlation_spectrum, magma_correlation
+from .genotypes import _symmetric_eigenvalues, correlation_spectrum, magma_correlation
 from .stats import GeneResult, _gamma_logsf, _result, effective_parameters, gene_test
 
 
@@ -116,7 +115,7 @@ def prepare_gene(g, model="magma", missing=None) -> PreparedGene:
             corr = magma_correlation(block, missing[:, start : start + count], clip=False)
             variances.append(float(np.einsum("ij,ij->", corr, corr)))
             np.clip(corr, -1, 1, out=corr)
-            spectrum = eigvalsh(corr, overwrite_a=True, check_finite=False)
+            spectrum = _symmetric_eigenvalues(corr)
         spectrum = spectrum[spectrum > 1e-4 * spectrum[spectrum > 0].sum() / count]
         spectra.append(spectrum)
         parameters.append(_magma_parameters(spectrum, count))

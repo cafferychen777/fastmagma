@@ -10,7 +10,7 @@ from tempfile import NamedTemporaryFile
 import numpy as np
 from scipy.special import ndtri_exp
 
-from ._input import filter_pval
+from ._input import filter_pval, parse_numeric
 
 LOG = logging.getLogger(__name__)
 
@@ -92,7 +92,7 @@ def _reference_rows(path, snps, directory):
     with NamedTemporaryFile(dir=directory, suffix=".pval", delete=False) as stream:
         filtered = Path(stream.name)
     try:
-        rows = filter_pval(path, snps, filtered)
+        rows = filter_pval(path, snps.positions, filtered)
         yield (path, None) if rows is None else (filtered, rows)
     finally:
         filtered.unlink(missing_ok=True)
@@ -171,26 +171,11 @@ def _input_chunks(path, chunk_rows, plain):
             yield dict(zip(("SNP", "P", "N"), array.T))
 
 
-_DECIMAL = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?\Z")
-
-
-def _number(value):
-    value = value.strip(" \t\r\n\v\f")
-    if _DECIMAL.fullmatch(value) or value.lower() in {
-        "inf",
-        "+inf",
-        "-inf",
-        "infinity",
-        "+infinity",
-        "-infinity",
-    }:
-        return float(value)
-    return np.nan
-
-
 def _numeric(values):
-    """Decimal conversion without accepting Python-only underscores or hex syntax."""
-    return np.fromiter((_number(value) for value in values), dtype=float, count=len(values))
+    """Convert decimal strings without changing the ordered QC decisions."""
+    output = np.empty(len(values), dtype=float)
+    parse_numeric(values, output)
+    return output
 
 
 class TraitStore:

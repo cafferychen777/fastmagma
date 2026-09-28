@@ -145,3 +145,45 @@ def test_missing_calls_in_rejected_columns_do_not_leave_a_missing_mask(tmp_path)
     assert keep.tolist() == [False, True]
     assert g.shape == (20, 1)
     assert missing is None
+
+
+@pytest.mark.parametrize("shape", [(489, 1), (489, 30), (80, 244)])
+@pytest.mark.parametrize("order", ["C", "F"])
+def test_symmetric_gram_layout_matches_full_gram(shape, order):
+    from scipy.linalg import eigvalsh
+
+    g = np.array(np.random.default_rng(91).normal(size=shape), order=order)
+    g -= g.mean(axis=0)
+    g /= np.linalg.norm(g, axis=0)
+    gram = g.T @ g if shape[1] <= shape[0] else g @ g.T
+    expected = eigvalsh(gram, check_finite=False)
+    tolerance = np.finfo(float).eps * max(shape) * max(expected[-1], 1) * 4
+    expected = expected[expected > tolerance]
+    actual = correlation_spectrum(g)
+    np.testing.assert_allclose(actual, expected, rtol=2e-14, atol=1e-14)
+
+
+@pytest.mark.parametrize("model", ["magma", "whole"])
+def test_single_cached_block_preserves_selection_and_result_ownership(tmp_path, model):
+    raw = np.random.default_rng(83).integers(0, 3, (40, 20)).astype(float)
+    raw[:12, 8] = np.nan
+    raw[:, 4] = 1
+    to_bed(tmp_path / "single.bed", raw)
+    reader = GenotypeReader(open_bed(tmp_path / "single.bed"), block_snps=32)
+    ids = [8, 2, 4, 2, 9]
+    g, keep, missing = reader.read_with_missing(ids, model=model)
+    expected, whole_keep = normalize_genotypes(raw[:, ids])
+    expected_keep = (
+        whole_keep & (np.isfinite(raw[:, ids]).sum(axis=0) >= 30)
+        if model == "magma"
+        else whole_keep
+    )
+    np.testing.assert_array_equal(keep, expected_keep)
+    np.testing.assert_array_equal(g, expected[:, keep])
+    if model == "magma":
+        assert missing is None
+    else:
+        np.testing.assert_array_equal(missing, np.isnan(raw[:, ids])[:, keep])
+    g[:] = 0
+    again, _, _ = reader.read_with_missing(ids, model=model)
+    np.testing.assert_array_equal(again, expected[:, keep])

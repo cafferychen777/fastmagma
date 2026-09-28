@@ -54,8 +54,15 @@ static double tilted_component(double v, void *data) {
         hash *= UINT64_C(0xff51afd7ed558ccd);
         hash ^= hash >> 33;
         node = &context->cache->nodes[hash & (CACHE_SIZE - 1)];
-        if (node->key == key) {
-            return context->sine ? node->sine : node->cosine;
+        for (unsigned int probe = 0; probe < 8; ++probe) {
+            IntegralNode *candidate = &context->cache->nodes[(hash + probe) & (CACHE_SIZE - 1)];
+            if (candidate->key == key) {
+                return context->sine ? candidate->sine : candidate->cosine;
+            }
+            if (candidate->key == 0) {
+                node = candidate;
+                break;
+            }
         }
     }
     double phase = 0.0;
