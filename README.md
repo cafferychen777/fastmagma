@@ -25,7 +25,10 @@ and a combined gene-by-trait matrix.
 
 ## Quick start
 
-Install from the source checkout with **Python 3.10 or newer**:
+Install from the source checkout with **Python 3.10 or newer** and a C compiler
+(GCC/Clang on Linux, Xcode Command Line Tools on macOS, or MSVC Build Tools on
+Windows). Source installs compile two small extensions; installing a compatible
+platform wheel does not require a compiler:
 
 ```bash
 python -m pip install .
@@ -140,13 +143,24 @@ fastmagma avoids repeating the same LD work across traits. It also uses the
 smaller of the sample-space and SNP-space Gram matrices for complete-data
 correlation spectra; missing-call correction uses the SNP-space matrix.
 
-The current default model produced
-**2,329 gene–trait results** for chromosome 22
-(CAD and Alzheimer's disease) in **143 seconds**, with **411 MiB peak resident
-memory**, using two CPU threads on a Linux compute node. This single run includes
-reading the GWAS inputs and computing statistics; installation and merging are
-excluded. It is not a controlled speed comparison against the MAGMA executable.
-See the [validation report](docs/VALIDATION.md) for current and historical runs.
+Native numerical callbacks, exact-node reuse, streaming input, and fewer array
+copies reduced runtime by **4.5–8.5×** versus the original implementation in five
+chromosome-22 workloads. The latest round further reduced prefiltered single-CAD
+runtime from **7.08 to 5.22 seconds** and peak memory from **257 to 155 MiB**;
+single AD fell from **3.37 to 2.43 seconds** and **216 to 136 MiB**.
+
+With one CPU/thread and three repetitions, paired **MAGMA v1.10** (`--genes-only`)
+remained faster for these prefiltered single traits: **4.28 seconds** for CAD and
+**1.34 seconds** for AD. From the original full GWAS input files, the CAD/AD pair
+took **8.86 seconds** with fastmagma versus **11.35 seconds** with MAGMA.
+fastmagma still used more memory (**174 versus 24 MiB** for that pair).
+
+The statistical model and requested integration accuracy are unchanged. Output
+checks retained gene sets and SNP/parameter/sample counts; maximum absolute Z
+change versus the original implementation was **1.9e-9**, with matching numerical
+method labels for every gene. See the [runtime report](docs/PERFORMANCE.md) for
+ranges, remaining bottlenecks, separately labeled multi-trait controls, and
+numerical checks.
 
 In a synthetic benchmark with **150 reference samples and 1,500 SNPs**, the
 smaller-matrix calculation took **0.95 ms**, compared with **188 ms** for the
@@ -166,8 +180,8 @@ python benchmarks/benchmark.py --out results/benchmark.json
 | Option | Default | Purpose |
 |---|---:|---|
 | `--threads` | `1` | Limit BLAS and genotype-reader threads |
-| `--chunk-rows` | `100000` | GWAS rows parsed per chunk |
-| `--cache-mb` | `64` | Genotype cache capacity in MiB; `0` disables caching |
+| `--chunk-rows` | `32768` | Reference-matched GWAS rows parsed per chunk; all rows for general-parser fallback |
+| `--cache-mb` | `8` | Genotype cache capacity in MiB; `0` disables caching |
 | `--workspace-mb` | `512` | Numerical-array workspace estimate allowed per gene, in MiB |
 | `--block-snps` | `256` | SNPs read per reference block |
 | `--max-gene-snps` | `100000` | Maximum SNP count before a gene triggers an error |

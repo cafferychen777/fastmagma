@@ -1,6 +1,6 @@
 # Validation record
 
-Date: 2026-09-24. Version: 0.1.0 (unreleased).
+Updated: 2026-09-28. Version: 0.1.0 (unreleased).
 
 ## Numerical accuracy
 
@@ -42,18 +42,60 @@ resolve the largest remaining AD discrepancies: fastmagma agrees with the
 independent probabilities; the official numerical integration is less accurate.
 Changing fastmagma to reproduce these official values would introduce error.
 
+### Additional tails exposed by the runtime experiments
+
+The shared-SNP benchmark exposed a larger CAD residual and strong sparse LDL
+signals. Jobs `2695177` and `2695183` checked five selected genes with independent
+inverse Laplace calculations (de Hoog and Talbot, each at 50 and 80 decimal
+digits). The four retained-rank-two/three cases also agreed with independent
+angular integration. Maximum fastmagma relative P error was 1.26e-13.
+
+| Trait / gene | Independent P | Official MAGMA P |
+|---|---:|---:|
+| Sparse LDL / 56534 | 1.52664018917591e-16 | 5e-10 |
+| Sparse LDL / 55839 | 4.68597996610478e-11 | 2.475e-7 |
+| Sparse LDL / 56846 | 1.00614444202173e-11 | 6.2533e-8 |
+| Sparse LDL / 56629 | 2.36848058663330e-4 | 1.777e-4 |
+| Shared CAD / 56659 | 5.49110465704017e-5 | 5.7882e-5 |
+
+These calculations resolve the checked discrepancies in favor of fastmagma;
+they do not diagnose every difference in the extended benchmarks. The portable
+[tail oracle](../benchmarks/validate_tail_probabilities.py) reconstructs each
+unblocked gene's LD and checks numerical convergence. `NPARAM` is a moment-based
+effective parameter count, not necessarily the retained spectral rank.
+
 ## Official executable boundary checks
 
 `benchmarks/validate_boundaries.py` constructs PLINK fixtures and runs both CLIs.
-Job 2680538 covered 28 cases: both programs accepted the same 24 valid cases and
-rejected the same four invalid cases (negative/NaN P, NaN/infinite N). Exit-code
-numbers differ; rejection behavior agrees.
+The initial 28 cases passed in jobs `2680538` and `2695162`. The lean-input
+revision repeated these and eight adjacent half-boundary cases in job
+`2695470`: both programs accepted the same **29 cases** and rejected the same
+**seven cases** (negative/NaN P, NaN/infinite N, and three negative N values at
+or immediately around -0.5). Exit-code numbers differ; rejection behavior
+agrees. All accepted cases have exact gene/NSNPS/NPARAM/N agreement; maximum
+absolute P difference was **4.5762e-6**. The three AD oracles passed again, with
+maximum absolute fastmagma error **2.00e-15**. The 35-case grid again had maximum
+relative error **1.3592e-12**.
+
+A focused official-executable probe (`2695467`) verified negative sample-size
+behavior: -0.1, -0, -1e-320, and -0.49 are rounded to zero and excluded, while
+-0.49999999999999994 is rejected by the investigated binary. Missing P bypasses
+N validation, even for invalid N text. The implementation retains the original
+`floor(abs(N) + 0.5)` rounding expression because replacing it with mathematically
+exact half-away rounding changed that observed binary boundary.
+
+A separate decimal-parser check examined 38 inputs under both models. Four
+last-bit conversion differences were observed against pandas; one changed QC:
+for -0.49999999999999994, direct float64 conversion reproduces official rejection,
+whereas the earlier pandas conversion led to exclusion without error. This is
+an explicitly tested compatibility correction, not a claim of bitwise identity
+between decimal parsers. Overflow may become NaN or infinity depending on the
+pandas version; both are rejected by the finite-value QC checks.
 
 Cases include complete calls, overlapping/disjoint missingness at 5% and 25%,
 6% and 26% missing calls, all-missing/monomorphic SNPs, P=0, P=1, tiny P,
 duplicate rows with valid/missing/invalid values in different orders, and sample
-sizes around the rounded-N > 50 cutoff. All accepted cases have identical gene
-sets, NSNPS, NPARAM and N. Maximum absolute P difference is 4.5762e-6.
+sizes around the rounded-N > 50 cutoff.
 
 The 100-sample, 60-SNP correlated-missingness case exercises two statistical
 blocks. Its untruncated corrected LD includes 576 entries above one, reaching
@@ -68,20 +110,34 @@ preserves much smaller tails. See [algorithm scope](ALGORITHM.md).
 
 ## Engineering and package checks
 
-The current suite has 234 tests. Coverage includes bounded genotype caching,
+The current suite has 344 tests. Coverage includes bounded genotype caching,
 missing-call LD and non-positive-semidefinite spectra, block boundaries and
 Brown limits, chunk-independent input ordering, trait-specific SNP masks,
 reuse of prepared spectra, input validation, resource guards, atomic output
 publication, concurrent chromosome locks, checksums and model-revision-safe
 merges. The whole-gene mode retains its separate historical input policy.
 
-All 234 tests passed locally on Python 3.12 and against installed wheels on
-Python 3.10 (minimum dependencies), 3.11, 3.13 and 3.14; the installed source
-distribution also passed all 234 tests on Python 3.12. Installed-package tests
-run outside the source checkout. Ruff and strict Twine checks pass. The minimum dependency
-set is NumPy 1.24.0, pandas 2.0.0, SciPy 1.10.0, bed-reader 1.0.0 and
-threadpoolctl 3.1.0. Windows checks are configured in CI; no hosted CI success
-or Windows execution is claimed here.
+All 344 tests passed locally on Python 3.12 and against independently compiled
+source installations on Python 3.10 (minimum dependencies), 3.11, 3.12, 3.13 and
+3.14 at production commit `831f66a`. Installed-package tests ran outside the
+checkout. Native callback checks cover the original NumPy formulas, capsule
+lifetime, invalid buffers, bounded node reuse, and retry without relaxing the
+error gate. Input checks compare native filtering with the general parser,
+verify that normal input loading does not import pandas, and exercise decimal
+conversion and adjacent half-boundary values. Ruff and strict Twine checks pass.
+The minimum dependency set is NumPy 1.24.0, pandas 2.0.0, SciPy 1.10.0,
+bed-reader 1.0.0 and threadpoolctl 3.1.0.
+
+Hosted [CI run 36453307630](https://github.com/cafferychen777/fastmagma/actions/runs/36453307630)
+passed all 15 Linux/macOS/Windows and Python 3.10–3.14 combinations, including
+installed-wheel tests, plus the minimum-dependency job at `831f66a`.
+
+A Linux regression check also evaluated AD gene 56702 against independent
+50- and 80-digit de Hoog and Talbot inversion. The final result,
+P = 0.5418722556973217, differs from the oracle by less than 1e-15.
+The check exposed sensitivity of QUADPACK's error estimate to last-bit callback
+rounding. Original single-component evaluation and an error-gated retry preserve
+the precise route without loosening tolerances.
 
 Wheel and source archives exclude reference data, private results, logs and
 local configuration. No TestPyPI/PyPI upload or namespace ownership has been
@@ -115,7 +171,12 @@ exact comparisons. Historical investigation is retained in
 
 ## Performance measurements
 
-The final run took 142.858 seconds including imports and peaked at
+The matched comparisons and optimization results from 2026-09-28 are recorded in
+[PERFORMANCE.md](PERFORMANCE.md). The measurements below are historical runs
+before the native callbacks and input/memory optimizations, with different
+thread settings.
+
+The earlier compatibility run took 142.858 seconds including imports and peaked at
 420,832 KiB RSS (410.97 MiB), using two allocated CPUs and a 3 GiB memory request.
 It prepared 2,589 block spectra; Brown aggregation was used for 144 CAD and
 five AD genes. One AD gene used the near-one `small_q_series` method. No block used a saddlepoint or LTZ fallback. These are individual
@@ -144,7 +205,8 @@ python benchmarks/validate_block_compatibility.py \
 ```
 
 Local evidence is under `results/boundary_validation/`, `results/final_validation/`
-and `results/algorithm_diagnostic/`. Results and datasets are not distributed.
+`results/single_final_boundaries/`, and `results/algorithm_diagnostic/`.
+Results and datasets are not distributed.
 Private run manifests record input paths, sizes and mtimes; published output
 files are checked by SHA-256. Obsolete diagnostic scripts are retained only
 beside their historical evidence; active reusable validators live in `benchmarks/`.
