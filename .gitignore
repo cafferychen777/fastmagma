@@ -4,6 +4,9 @@ venv/
 env/
 __pycache__/
 *.py[cod]
+*.so
+*.dylib
+*.pyd
 *.egg-info/
 /build/
 /dist/

@@ -257,3 +257,25 @@ def test_merge_rejects_mixed_models_and_legacy_outputs(inputs, second_model):
     assert json.loads((out / "merge.manifest.json").read_text())["model"] == (
         second_model or "whole"
     )
+
+
+def test_reference_order_deduplicates_annotation_and_ignores_unneeded_metadata(inputs):
+    p, args = inputs
+    assert main(args) == 0
+    expected = (p / "out/a.chr22.fastmagma.tsv").read_bytes()
+    # Unused PLINK metadata need not be parsed into numerical arrays.
+    for name, columns in [("ref.22.bim", [2, 3]), ("ref.22.fam", [4])]:
+        path = p / name
+        lines = []
+        for line in path.read_text().splitlines():
+            fields = line.split()
+            for column in columns:
+                fields[column] = "unused"
+            lines.append("\t".join(fields))
+        path.write_text("\n".join(lines) + "\n")
+    annotation = p / "genes.annot"
+    annotation.write_text(
+        annotation.read_text().replace("rs0\trs1\trs2", "rs2\tmissing\trs0\trs1\trs2")
+    )
+    assert main(args + ["--overwrite"]) == 0
+    assert (p / "out/a.chr22.fastmagma.tsv").read_bytes() == expected

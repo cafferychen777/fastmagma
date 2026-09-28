@@ -2,6 +2,15 @@
 
 ## 0.1.0 — unreleased
 
+- Move quadrature callbacks to portable C extensions while retaining the same
+  integration formulas, tolerances, diagnostics, and fallback decisions.
+- Filter plain GWAS inputs by reference SNP in a native streaming pass before
+  constructing numeric-column strings; retain the general parser for unusual
+  tables and preserve ordered input QC.
+- Reuse the reference SNP index across annotation mapping and trait input;
+  reduce default parsing chunks to 32,768 rows and genotype cache to 8 MiB.
+- Build platform-specific wheels; source installations require a C compiler.
+
 - Add default MAGMA-style within-gene SNP blocking, block-correlation estimation,
   Brown aggregation and NPARAM; retain the previous test as `--model whole`.
 - Match the investigated MAGMA summary-statistic QC: P clipping, ordered

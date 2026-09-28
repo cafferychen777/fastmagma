@@ -138,6 +138,18 @@ integral, and exact cases to high-precision incomplete gamma.
 Multi-block results use `brown:` followed by their component numerical methods,
 so an approximate block tail remains visible in the combined result's label.
 
+## Execution and memory
+
+The quadrature callbacks execute in C; SciPy still controls integration with the
+same formulas, tolerances, error checks, and fallback rules above. This changes
+execution cost, not the statistical model or requested numerical accuracy.
+
+Plain whitespace GWAS tables are streamed through a reference-SNP filter before
+pandas constructs P/N strings. General tables use the original parser. Both
+paths apply the same ordered QC, preserve source row counts, and use the shared
+reference SNP index. The default parsing chunk is 32,768 retained rows and the
+default genotype cache is 8 MiB; these settings do not change statistical blocks.
+
 ## Output interpretation
 
 - `LOG10P`: log10(P), not minus log10(P).

@@ -5,9 +5,9 @@ import math
 import warnings
 
 import numpy as np
-from scipy import integrate, optimize, special
+from scipy import LowLevelCallable, integrate, optimize, special
 from scipy.integrate import IntegrationWarning
-from scipy.stats import ncx2, norm
+from . import _native
 
 
 class NumericalError(ArithmeticError):
@@ -120,13 +120,7 @@ def imhof_survival(q, lam):
     Warnings are local to this call; importing this package changes no filters.
     """
 
-    def integrand(u):
-        if u == 0:
-            return 0.5 * (lam.sum() - q)
-        au = lam * u
-        theta = 0.5 * (np.arctan(au).sum() - q * u)
-        log_rho = 0.25 * np.log1p(au * au).sum()
-        return np.sin(theta) * np.exp(-log_rho) / u
+    integrand = LowLevelCallable(_native.imhof_integrand(np.ascontiguousarray(lam, dtype=np.float64), q))
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", IntegrationWarning)
@@ -160,19 +154,10 @@ def tilted_logsf(q, lam):
     beta = 2 * lam / denominator / sd
     exponent = -0.5 * np.log(denominator).sum() - t * q
 
-    def component(v, sine):
-        bv = beta * v
-        phase = 0.5 * np.arctan(bv).sum()
-        amplitude = np.exp(-0.25 * np.log1p(bv * bv).sum())
-        numerator = (
-            h * np.sin(phase) - v * np.cos(phase) if sine else h * np.cos(phase) + v * np.sin(phase)
-        )
-        return amplitude * numerator / (h * h + v * v)
-
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", IntegrationWarning)
         cosine, ce = integrate.quad(
-            lambda v: component(v, False),
+            LowLevelCallable(_native.tilted_integrand(beta, h, False)),
             0,
             np.inf,
             weight="cos",
@@ -182,7 +167,7 @@ def tilted_logsf(q, lam):
             limit=200,
         )
         sine, se = integrate.quad(
-            lambda v: component(v, True),
+            LowLevelCallable(_native.tilted_integrand(beta, h, True)),
             0,
             np.inf,
             weight="sin",
@@ -231,7 +216,7 @@ def _saddlepoint(q, lam):
             raise NumericalError("Invalid saddlepoint correction")
         logp = -rate - 0.5 * math.log(2 * math.pi) + math.log(correction)
     else:
-        p = norm.sf(w) + norm.pdf(w) * (1 / u - 1 / w)
+        p = special.ndtr(-w) + math.exp(-w * w / 2) / math.sqrt(2 * math.pi) * (1 / u - 1 / w)
         if not 0 < p <= 1:
             raise NumericalError("Invalid saddlepoint probability")
         logp = math.log(p)
@@ -239,6 +224,8 @@ def _saddlepoint(q, lam):
 
 
 def _ltz_logsf(q, lam):
+    from scipy.stats import ncx2
+
     c1, c2, c3, c4 = (np.sum(lam**j) for j in range(1, 5))
     s1, s2 = c3 / c2**1.5, c4 / c2**2
     if s1**2 > s2:

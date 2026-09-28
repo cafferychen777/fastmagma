@@ -38,11 +38,11 @@ def main(argv=None):
         help="Statistical model: MAGMA-compatible gene blocks (default) or whole-gene test",
     )
     run.add_argument("--threads", type=_positive, default=1)
-    run.add_argument("--chunk-rows", type=_positive, default=100000)
+    run.add_argument("--chunk-rows", type=_positive, default=32768)
     run.add_argument(
         "--cache-mb",
         type=_nonnegative,
-        default=64,
+        default=8,
         help="Normalized genotype cache capacity in MiB",
     )
     run.add_argument(

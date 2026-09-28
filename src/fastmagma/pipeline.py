@@ -104,20 +104,39 @@ def run_chromosome(args):
     input_paths = [f"{bfile}.{ext}" for ext in ("bed", "bim", "fam")]
     input_paths += [args.annot] + [str(Path(args.pval_dir) / f"{t}.pval") for t in traits]
     records = [_input_record(p) for p in input_paths]
-    bed = open_bed(f"{bfile}.bed", count_A1=False, num_threads=args.threads)
+    # Only SNP identity and chromosome are needed; avoid materializing unused
+    # PLINK sample labels, allele strings, and physical/genetic positions.
+    bed = open_bed(
+        f"{bfile}.bed",
+        count_A1=False,
+        num_threads=args.threads,
+        properties=dict.fromkeys(
+            (
+                "fid",
+                "iid",
+                "father",
+                "mother",
+                "sex",
+                "pheno",
+                "cm_position",
+                "bp_position",
+                "allele_1",
+                "allele_2",
+            )
+        ),
+    )
     minimum_samples = 50 if model == "magma" else 2
     if bed.iid_count < minimum_samples:
         raise ValueError(
             f"The {model} model requires at least {minimum_samples} reference individuals"
         )
-    snps = np.asarray(bed.sid, dtype=str)
-    if len(set(snps)) != len(snps) or np.any(snps == ""):
+    snps = pd.Index(bed.sid)
+    if snps.empty or not snps.is_unique or (snps == "").any():
         raise ValueError("Reference SNP IDs must be unique and nonempty")
     if any(str(c) != str(chrom) for c in bed.chromosome):
         raise ValueError("PLINK reference contains unexpected chromosome labels")
     genes = load_annotation(args.annot, chrom)
-    reference = {s: i for i, s in enumerate(snps)}
-    if not any(s in reference for gene in genes for s in gene.snps):
+    if not any((snps.get_indexer(gene.snps) >= 0).any() for gene in genes):
         raise ValueError("No annotated SNPs occur in the reference panel")
     reader = GenotypeReader(bed, args.cache_mb, args.block_snps, args.threads)
     counts = {t: 0 for t in traits}
@@ -144,9 +163,8 @@ def run_chromosome(args):
                     for gene_number, gene in enumerate(genes, 1):
                         if gene_number % 100 == 0:
                             LOG.info("Chromosome %s: gene %s/%s", chrom, gene_number, len(genes))
-                        ids = np.array(
-                            sorted({reference[s] for s in gene.snps if s in reference}), dtype=int
-                        )
+                        ids = snps.get_indexer(gene.snps)
+                        ids = np.unique(ids[ids >= 0])
                         # Avoid genotype work for SNPs absent in all traits.
                         ids = ids[available[ids]]
                         if not len(ids):

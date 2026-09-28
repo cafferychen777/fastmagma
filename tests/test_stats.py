@@ -268,3 +268,93 @@ def test_small_statistic_higher_rank_against_beta_cdf(multiplicities):
     cdf = value / special.beta(n / 2, m / 2)
     result = stats.gene_test(q, [1.0] * n + [ratio] * m)
     assert result.log10p * math.log(10) == pytest.approx(math.log1p(-cdf), rel=1e-12, abs=0)
+
+
+@pytest.mark.parametrize("rank", [2, 3, 30, 244])
+@pytest.mark.parametrize("factor", [0.1, 1.0, 10.0, 100.0])
+def test_native_tilted_matches_original_numpy_quadrature(monkeypatch, rank, factor):
+    lam = np.geomspace(1, 0.001, rank)
+    q = factor * lam.sum()
+    native = stats.tilted_logsf(q, lam)
+
+    def reference_factory(beta, h, sine):
+        def component(v):
+            bv = beta * v
+            phase = 0.5 * np.arctan(bv).sum()
+            amplitude = np.exp(-0.25 * np.log1p(bv * bv).sum())
+            numerator = (
+                h * np.sin(phase) - v * np.cos(phase)
+                if sine
+                else h * np.cos(phase) + v * np.sin(phase)
+            )
+            return amplitude * numerator / (h * h + v * v)
+
+        return component
+
+    monkeypatch.setattr(stats._native, "tilted_integrand", reference_factory)
+    monkeypatch.setattr(stats, "LowLevelCallable", lambda callback: callback)
+    reference = stats.tilted_logsf(q, lam)
+    assert native == pytest.approx(reference, rel=2e-12, abs=2e-11)
+
+
+def test_native_capsule_owns_spectrum_and_context():
+    import ctypes
+    import gc
+
+    from scipy import LowLevelCallable
+
+    beta = np.array([0.1, 0.5, 1.0])
+    callback = LowLevelCallable(stats._native.tilted_integrand(beta, 0.3, False))
+    get_pointer = ctypes.pythonapi.PyCapsule_GetPointer
+    get_pointer.restype = ctypes.c_void_p
+    get_pointer.argtypes = [ctypes.py_object, ctypes.c_char_p]
+    get_context = ctypes.pythonapi.PyCapsule_GetContext
+    get_context.restype = ctypes.c_void_p
+    get_context.argtypes = [ctypes.py_object]
+    capsule = callback.function
+    function = ctypes.CFUNCTYPE(ctypes.c_double, ctypes.c_double, ctypes.c_void_p)(
+        get_pointer(capsule, b"double (double, void *)")
+    )
+    context = get_context(capsule)
+    expected = function(0.7, context)
+    beta[:] = 99
+    del beta
+    gc.collect()
+    assert function(0.7, context) == expected
+    assert np.isfinite(integrate.quad(callback, 0, 1)[0])
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        np.array([], dtype=float),
+        np.ones(2, dtype=np.float32),
+        np.array([1.0, np.nan]),
+        np.array([-1.0, 1.0]),
+    ],
+)
+def test_native_rejects_invalid_buffers(values):
+    with pytest.raises(ValueError):
+        stats._native.tilted_integrand(values, 1.0, False)
+
+
+@pytest.mark.parametrize("q", [0.5, 3.0, 10.0])
+def test_native_imhof_matches_original_numpy_quadrature(monkeypatch, q):
+    lam = np.geomspace(1, 0.01, 8)
+    native, _ = stats.imhof_survival(q, lam)
+
+    def reference_factory(values, statistic):
+        def component(u):
+            if u == 0:
+                return 0.5 * (values.sum() - statistic)
+            au = values * u
+            theta = 0.5 * (np.arctan(au).sum() - statistic * u)
+            log_rho = 0.25 * np.log1p(au * au).sum()
+            return np.sin(theta) * np.exp(-log_rho) / u
+
+        return component
+
+    monkeypatch.setattr(stats._native, "imhof_integrand", reference_factory)
+    monkeypatch.setattr(stats, "LowLevelCallable", lambda callback: callback)
+    reference, _ = stats.imhof_survival(q, lam)
+    assert native == pytest.approx(reference, abs=2e-12)

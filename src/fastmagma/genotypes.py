@@ -36,7 +36,7 @@ def _normalize_genotypes(raw):
 class GenotypeReader:
     """LRU cache of normalized contiguous SNP blocks, bounded by array bytes."""
 
-    def __init__(self, bed, cache_mb=64, block_snps=256, threads=1):
+    def __init__(self, bed, cache_mb=8, block_snps=256, threads=1):
         self.bed = bed
         self.capacity = int(cache_mb * 2**20)
         self.block_snps = block_snps

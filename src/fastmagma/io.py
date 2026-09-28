@@ -4,10 +4,14 @@ from dataclasses import dataclass
 from pathlib import Path
 import logging
 import re
+from contextlib import contextmanager
+from tempfile import NamedTemporaryFile
 
 import numpy as np
 import pandas as pd
 from scipy.special import ndtri_exp
+
+from ._input import filter_pval
 
 LOG = logging.getLogger(__name__)
 
@@ -83,6 +87,18 @@ def load_annotation(path, chrom):
     return genes
 
 
+@contextmanager
+def _reference_rows(path, snps, directory):
+    """Stream plain tables through the reference filter; preserve general CSV parsing."""
+    with NamedTemporaryFile(dir=directory, suffix=".pval", delete=False) as stream:
+        filtered = Path(stream.name)
+    try:
+        rows = filter_pval(path, snps, filtered)
+        yield (path, None) if rows is None else (filtered, rows)
+    finally:
+        filtered.unlink(missing_ok=True)
+
+
 class TraitStore:
     """Three float64 arrays per trait: P, N, and precomputed chi-square values.
 
@@ -96,7 +112,7 @@ class TraitStore:
             raise ValueError("Model must be magma or whole")
         self.model = model
         self.traits = traits
-        self.index = pd.Index(snps)
+        self.index = snps if isinstance(snps, pd.Index) else pd.Index(snps)
         if not len(self.index) or not self.index.is_unique:
             raise ValueError("Reference SNP identifiers must be nonempty and unique")
         self.path = Path(directory) / "traits.f64"
@@ -112,48 +128,51 @@ class TraitStore:
             seen = np.zeros(len(self.index), dtype=np.uint8)
             rows, matched, invalid = 0, 0, 0
             path = Path(pval_dir) / f"{trait}.pval"
-            chunks = pd.read_csv(
-                path,
-                sep=r"\s+",
-                usecols=["SNP", "P", "N"],
-                dtype=str,
-                keep_default_na=False,
-                chunksize=chunk_rows,
-            )
-            with chunks:
-                for chunk in chunks:
-                    rows += len(chunk)
-                    position = self.index.get_indexer(chunk["SNP"])
-                    present = position >= 0
-                    position = position[present]
-                    matched += len(position)
-                    if not len(position):
-                        continue
-                    unique, first, counts = np.unique(
-                        position, return_index=True, return_counts=True
-                    )
-                    selected = chunk.loc[present, ["P", "N"]]
-                    if self.model == "magma":
-                        # States: unread, accepted, duplicated, excluded. An excluded
-                        # ID stays excluded; a repeat of an accepted ID is dropped
-                        # before parsing that repeat's P or N.
-                        unread = seen[unique] == 0
-                        repeated = unique[seen[unique] == 1]
-                        seen[repeated] = 2
-                        ids = unique[unread]
-                        selected = selected.iloc[first[unread]]
-                        p, n, good = self._parse_rows(selected, path)
-                        invalid += int((~good).sum())
-                        seen[ids] = np.where(good, 1, 3)
-                        seen[ids[good & (counts[unread] > 1)]] = 2
-                    else:
-                        p, n, good = self._parse_rows(selected, path)
-                        invalid += int((~good).sum())
-                        seen[unique] = np.minimum(2, seen[unique].astype(np.int64) + counts)
-                        ids = position
-                    good &= seen[ids] == 1
-                    values[0, ids[good]], values[1, ids[good]] = p[good], n[good]
-                    values[:, unique[seen[unique] == 2]] = np.nan
+            with _reference_rows(path, self.index, self.path.parent) as (input_path, total_rows):
+                chunks = pd.read_csv(
+                    input_path,
+                    sep=r"\s+",
+                    usecols=["SNP", "P", "N"],
+                    dtype=str,
+                    keep_default_na=False,
+                    chunksize=chunk_rows,
+                )
+                with chunks:
+                    for chunk in chunks:
+                        rows += len(chunk)
+                        position = self.index.get_indexer(chunk["SNP"])
+                        present = position >= 0
+                        position = position[present]
+                        matched += len(position)
+                        if not len(position):
+                            continue
+                        unique, first, counts = np.unique(
+                            position, return_index=True, return_counts=True
+                        )
+                        selected = chunk.loc[present, ["P", "N"]]
+                        if self.model == "magma":
+                            # States: unread, accepted, duplicated, excluded. An excluded
+                            # ID stays excluded; a repeat of an accepted ID is dropped
+                            # before parsing that repeat's P or N.
+                            unread = seen[unique] == 0
+                            repeated = unique[seen[unique] == 1]
+                            seen[repeated] = 2
+                            ids = unique[unread]
+                            selected = selected.iloc[first[unread]]
+                            p, n, good = self._parse_rows(selected, path)
+                            invalid += int((~good).sum())
+                            seen[ids] = np.where(good, 1, 3)
+                            seen[ids[good & (counts[unread] > 1)]] = 2
+                        else:
+                            p, n, good = self._parse_rows(selected, path)
+                            invalid += int((~good).sum())
+                            seen[unique] = np.minimum(2, seen[unique].astype(np.int64) + counts)
+                            ids = position
+                        good &= seen[ids] == 1
+                        values[0, ids[good]], values[1, ids[good]] = p[good], n[good]
+                        values[:, unique[seen[unique] == 2]] = np.nan
+                if total_rows is not None:
+                    rows = total_rows
             usable = np.isfinite(values[0])
             ids = np.flatnonzero(usable)
             # Inverse normal in log space preserves subnormal positive input P.

@@ -3,13 +3,20 @@
 ## Local checks
 
 1. Run tests on Python 3.10–3.14 and on each supported operating system.
-2. Build a fresh wheel and sdist. Run `twine check --strict` on both archives.
+2. Build fresh platform wheels and an sdist. Run `twine check --strict` on every archive.
 3. Install the wheel in a fresh environment outside the checkout, run the
    installed CLI tests, and rebuild/install the sdist separately.
 4. Inspect archive contents; no data, logs, caches, credentials, or personal
    configuration should be included.
 5. Confirm README, algorithm specification, changelog, and validation report
    describe the same version and method selection.
+
+The package includes two required CPython C extensions, so wheels are specific
+to Python ABI, operating system, and architecture; do not publish a `py3-none-any`
+wheel. Build and test each wheel on its target platform. A locally built Linux
+wheel is not automatically a portable manylinux wheel. Include both C sources
+and `setup.py` in the sdist, and verify installation with a C compiler present.
+Binary-wheel users do not need a compiler.
 
 The CI configuration performs Linux/macOS/Windows tests and wheel installation.
 Local execution of a CI-equivalent command does not mean a hosted CI run passed.
