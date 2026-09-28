@@ -25,6 +25,7 @@ def prepare(args):
     from fastmagma._input import filter_pval
     from fastmagma.io import TraitStore
 
+    traits = args.traits
     directory = args.out_dir / "inputs"
     filtered, shared = directory / "filtered", directory / "shared"
     filtered.mkdir(parents=True, exist_ok=True)
@@ -43,12 +44,12 @@ def prepare(args):
     if not genes:
         raise ValueError("No chromosome-22 genes in annotation")
     source_rows = {}
-    for trait in TRAITS:
+    for trait in traits:
         source, destination = args.pval_dir / f"{trait}.pval", filtered / f"{trait}.pval"
         source_rows[trait] = filter_pval(source, snps, destination)
         if source_rows[trait] is None:
             raise ValueError(f"Expected plain whitespace benchmark input: {source}")
-    store = TraitStore(directory, TRAITS, snps, model="magma")
+    store = TraitStore(directory, traits, snps, model="magma")
     try:
         store.load(filtered, 100000)
         usable = np.isfinite(store.values[:, 0, :]).all(axis=0)
@@ -59,7 +60,7 @@ def prepare(args):
         store.path.unlink()
     if not common:
         raise ValueError("No common usable reference SNPs across the eight traits")
-    for trait in TRAITS:
+    for trait in traits:
         present, rows = filter_pvalues(filtered / f"{trait}.pval", shared / f"{trait}.pval", common)
         if present != common or rows != len(common):
             raise ValueError(f"Common inputs are not unique and complete for {trait}")
@@ -69,7 +70,7 @@ def prepare(args):
         source_rows=source_rows,
         reference_qc=qc,
         common_usable_snps=len(common),
-        traits=TRAITS,
+        traits=traits,
         policy="Intersect MAGMA-QC usable SNP IDs across all eight traits; retain original P/N rows",
     )
 
@@ -78,6 +79,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("magma", "bfile", "annot", "pval-dir", "out-dir"):
         parser.add_argument(f"--{name}", type=Path, required=True)
+    parser.add_argument(
+        "--traits",
+        default=",".join(TRAITS),
+        help="Exactly eight unique comma-separated trait identifiers",
+    )
     parser.add_argument("--threads", type=int, default=1)
     parser.add_argument("--repetitions", type=int, default=3)
     args = parser.parse_args()
@@ -91,6 +97,14 @@ def main():
         "VECLIB_MAXIMUM_THREADS",
     ):
         os.environ[name] = str(args.threads)
+    from fastmagma.io import parse_traits
+
+    try:
+        args.traits = parse_traits(args.traits)
+    except ValueError as exc:
+        parser.error(str(exc))
+    if len(args.traits) != 8:
+        parser.error("Exactly eight unique traits are required")
     from validate_block_compatibility import compare
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
@@ -115,7 +129,7 @@ def main():
         )
     save(result_path, results)
     for count in (1, 2, 4, 8):
-        scenario, traits = f"shared_{count}", TRAITS[:count]
+        scenario, traits = f"shared_{count}", args.traits[:count]
         for repetition in range(1, args.repetitions + 1):
             record = results["records"].setdefault(scenario, {}).setdefault(str(repetition), {})
             order = ["magma", "fastmagma"] if repetition % 2 else ["fastmagma", "magma"]

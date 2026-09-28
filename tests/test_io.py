@@ -159,7 +159,7 @@ def test_reference_filter_delegates_general_tables(tmp_path, content):
     from fastmagma._input import filter_pval
 
     source, destination = tmp_path / "input", tmp_path / "output"
-    source.write_text(content)
+    source.write_text(content, encoding="utf-8")
     assert filter_pval(source, ["r1"], destination) is None
 
 
