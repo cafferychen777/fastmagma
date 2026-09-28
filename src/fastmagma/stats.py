@@ -120,7 +120,9 @@ def imhof_survival(q, lam):
     Warnings are local to this call; importing this package changes no filters.
     """
 
-    integrand = LowLevelCallable(_native.imhof_integrand(np.ascontiguousarray(lam, dtype=np.float64), q))
+    integrand = LowLevelCallable(
+        _native.imhof_integrand(np.ascontiguousarray(lam, dtype=np.float64), q)
+    )
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", IntegrationWarning)
@@ -153,11 +155,12 @@ def tilted_logsf(q, lam):
     h = t * sd
     beta = 2 * lam / denominator / sd
     exponent = -0.5 * np.log(denominator).sum() - t * q
+    cosine_callback, sine_callback = _native.tilted_integrands(beta, h)
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", IntegrationWarning)
         cosine, ce = integrate.quad(
-            LowLevelCallable(_native.tilted_integrand(beta, h, False)),
+            LowLevelCallable(cosine_callback),
             0,
             np.inf,
             weight="cos",
@@ -167,7 +170,7 @@ def tilted_logsf(q, lam):
             limit=200,
         )
         sine, se = integrate.quad(
-            LowLevelCallable(_native.tilted_integrand(beta, h, True)),
+            LowLevelCallable(sine_callback),
             0,
             np.inf,
             weight="sin",

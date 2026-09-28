@@ -99,3 +99,49 @@ def test_magma_pairwise_ld_uses_individual_means_and_joint_count():
     assert magma_correlation(g[:, :1], missing[:, :1], g[:, 1:], missing[:, 1:]) == pytest.approx(
         expected[:1, 1:], abs=1e-14
     )
+
+
+@pytest.mark.parametrize("missing_rate", [0, 0.002, 0.25])
+def test_normalization_preserves_input_and_matches_explicit_imputation(missing_rate):
+    raw = np.random.default_rng(41).integers(0, 3, (489, 37)).astype(float)
+    raw[np.random.default_rng(42).random(raw.shape) < missing_rate] = np.nan
+    raw[:, -1] = 1
+    original = raw.copy()
+    g, keep = normalize_genotypes(raw)
+    np.testing.assert_array_equal(raw, original)
+    means = np.nanmean(raw, axis=0)
+    expected = np.where(np.isnan(raw), means, raw) - means
+    lengths = np.sqrt(np.einsum("ij,ij->j", expected, expected))
+    expected[:, keep] /= lengths[keep]
+    np.testing.assert_allclose(g, expected, rtol=0, atol=1e-15)
+
+
+def test_reader_mixed_blocks_order_duplicates_and_cache_ownership(tmp_path):
+    raw = np.random.default_rng(8).integers(0, 3, (20, 30)).astype(float)
+    raw[0, 15] = np.nan
+    raw[:, 27] = 1
+    to_bed(tmp_path / "mixed.bed", raw)
+    reader = GenotypeReader(open_bed(tmp_path / "mixed.bed"), block_snps=10)
+    indices = [21, 15, 2, 27, 15]
+    g, keep, missing = reader.read_with_missing(indices)
+    expected, expected_keep = normalize_genotypes(raw[:, indices])
+    np.testing.assert_array_equal(keep, expected_keep)
+    np.testing.assert_array_equal(g, expected[:, keep])
+    np.testing.assert_array_equal(missing, np.isnan(raw[:, indices])[:, keep])
+    assert reader.cache[0][2] is None
+    assert reader.cache[2][2] is None
+    g[:] = 99
+    again, _, _ = reader.read_with_missing(indices)
+    np.testing.assert_array_equal(again, expected[:, keep])
+    assert reader.cache_bytes <= reader.capacity
+
+
+def test_missing_calls_in_rejected_columns_do_not_leave_a_missing_mask(tmp_path):
+    raw = np.random.default_rng(12).integers(0, 3, (20, 4)).astype(float)
+    raw[:6, 1] = np.nan
+    to_bed(tmp_path / "rejected.bed", raw)
+    reader = GenotypeReader(open_bed(tmp_path / "rejected.bed"))
+    g, keep, missing = reader.read_with_missing([1, 2])
+    assert keep.tolist() == [False, True]
+    assert g.shape == (20, 1)
+    assert missing is None

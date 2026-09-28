@@ -24,6 +24,8 @@ Default `magma` mode uses the following rules:
   Literal `NA` and `-1` mark missing P; other invalid P values raise an error.
 - Round positive SNP N to the nearest integer, with halves rounded upward,
   then retain only `N > 50`. Thus 50.49 is excluded and 50.5 becomes 51.
+  The floating-point implementation uses `floor(abs(N) + 0.5)` with the
+  original sign, matching the investigated MAGMA binary at half boundaries.
   Literal `NA` marks missing N; nonfinite values or rounded values outside
   `[0, 2**31-1]` raise an error when the row reaches N validation.
 - Process each matched ID in input order. If its first row is excluded for
@@ -141,14 +143,25 @@ so an approximate block tail remains visible in the combined result's label.
 ## Execution and memory
 
 The quadrature callbacks execute in C; SciPy still controls integration with the
-same formulas, tolerances, error checks, and fallback rules above. This changes
-execution cost, not the statistical model or requested numerical accuracy.
+same formulas, tolerances, error checks, and fallback rules above. The sine and
+cosine callbacks share a bounded cache of 4,096 nodes, keyed by the exact double
+representation. Revisited nodes reuse both components; hash collisions trigger
+recomputation. There is no interpolation or change to QUADPACK's node selection
+or error estimates. The approximately 96 KiB cache lives only for that integral.
 
-Plain whitespace GWAS tables are streamed through a reference-SNP filter before
-pandas constructs P/N strings. General tables use the original parser. Both
-paths apply the same ordered QC, preserve source row counts, and use the shared
-reference SNP index. The default parsing chunk is 32,768 retained rows and the
-default genotype cache is 8 MiB; these settings do not change statistical blocks.
+Plain whitespace GWAS tables pass through a native reference-SNP filter, then
+bounded string-array chunks and decimal conversion. Pandas is imported only
+for general table syntax or output merging. Both input paths retain ordered QC,
+source row counts, and the same missing-value rules. Decimal strings convert
+straight to float64 before the existing sample-size rounding and QC rules.
+
+The BIM file is streamed into one reference-order SNP lookup shared by
+annotation mapping and trait input. Unused PLINK metadata arrays are not
+materialized. Genotype normalization modifies only newly owned read buffers;
+the public normalization helper still copies its input. Complete blocks retain
+no missing-call mask, and gene assembly avoids a final copy when all selected
+SNPs pass QC. The default parsing chunk is 32,768 retained rows and the genotype
+cache is 8 MiB; neither changes the statistical gene blocks.
 
 ## Output interpretation
 

@@ -3,12 +3,19 @@
 ## 0.1.0 — unreleased
 
 - Move quadrature callbacks to portable C extensions while retaining the same
-  integration formulas, tolerances, diagnostics, and fallback decisions.
+  integration formulas, tolerances, diagnostics, and fallback rules.
+- Share a bounded exact-node cache between sine and cosine quadrature callbacks,
+  avoiding repeated spectrum calculations without interpolation.
 - Filter plain GWAS inputs by reference SNP in a native streaming pass before
   constructing numeric-column strings; retain the general parser for unusual
   tables and preserve ordered input QC.
-- Reuse the reference SNP index across annotation mapping and trait input;
-  reduce default parsing chunks to 32,768 rows and genotype cache to 8 MiB.
+- Stream BIM metadata into one reference SNP lookup shared by annotation and
+  trait input; load pandas only for general table syntax or output merging.
+- Normalize newly owned genotype buffers in place, omit missing-call masks for
+  complete blocks, and avoid copies when every selected SNP passes QC.
+- Reduce default parsing chunks to 32,768 rows and genotype cache to 8 MiB.
+- Convert decimal input strings directly to float64, preserving the investigated
+  MAGMA binary's sample-size rounding behavior at adjacent half-boundary values.
 - Build platform-specific wheels; source installations require a C compiler.
 
 - Add default MAGMA-style within-gene SNP blocking, block-correlation estimation,
@@ -42,7 +49,9 @@
   and CLI. Replace conflicting historical algorithm prose.
 - Add analytic, independent-reference, integration, resource, and packaging tests;
   add cross-platform CI and reproducible synthetic benchmarks.
-- Validate 28 input/missingness boundary cases against official MAGMA and
+- Validate 36 input/missingness boundary cases against official MAGMA and
   resolve three real low-SNP discrepancies using independent angular integrals.
+- Add a portable high-precision inverse-Laplace validator; independently resolve
+  five additional CAD/LDL discrepancies without reproducing official tail errors.
 
 Original extracted core SHA-256: `8436b112a6176bad336bbe012689bcf9d532cfefec71ca6e1ee21b79010e5cc0`.

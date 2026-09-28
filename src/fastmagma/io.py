@@ -8,7 +8,6 @@ from contextlib import contextmanager
 from tempfile import NamedTemporaryFile
 
 import numpy as np
-import pandas as pd
 from scipy.special import ndtri_exp
 
 from ._input import filter_pval
@@ -99,6 +98,101 @@ def _reference_rows(path, snps, directory):
         filtered.unlink(missing_ok=True)
 
 
+class SnpIndex:
+    """One reference-order lookup shared by annotation and trait inputs."""
+
+    def __init__(self, snps):
+        self.positions = {}
+        for position, snp in enumerate(snps):
+            if not isinstance(snp, str) or not snp or snp in self.positions:
+                raise ValueError("Reference SNP identifiers must be nonempty and unique")
+            self.positions[snp] = position
+        if not self.positions:
+            raise ValueError("Reference SNP identifiers must be nonempty and unique")
+
+    def __len__(self):
+        return len(self.positions)
+
+    def __iter__(self):
+        return iter(self.positions)
+
+    def get_indexer(self, snps):
+        return np.fromiter((self.positions.get(snp, -1) for snp in snps), dtype=np.intp)
+
+
+def load_reference_index(path, chrom):
+    """Read needed BIM columns directly into the sole reference lookup."""
+
+    def identifiers():
+        with open(path) as stream:
+            for number, line in enumerate(stream, 1):
+                line = line.partition("#")[0].rstrip("\r\n")
+                if not line.strip():
+                    continue
+                fields = line.split("\t", 2)
+                if len(fields) < 2:
+                    raise ValueError(f"Malformed BIM at {path}:{number}")
+                if fields[0] != str(chrom):
+                    raise ValueError("PLINK reference contains unexpected chromosome labels")
+                yield fields[1]
+
+    return SnpIndex(identifiers())
+
+
+def _input_chunks(path, chunk_rows, plain):
+    """Yield bounded string arrays; load pandas only for its general CSV syntax."""
+    if not plain:
+        import pandas as pd
+
+        with pd.read_csv(
+            path,
+            sep=r"\s+",
+            usecols=["SNP", "P", "N"],
+            dtype=str,
+            keep_default_na=False,
+            chunksize=chunk_rows,
+        ) as chunks:
+            for chunk in chunks:
+                yield {name: chunk[name].to_numpy() for name in ("SNP", "P", "N")}
+        return
+    with open(path, encoding="ascii") as stream:
+        header = next(stream).split()
+        columns = [header.index(name) for name in ("SNP", "P", "N")]
+        rows = []
+        for line in stream:
+            fields = line.split()
+            rows.append([fields[column] for column in columns])
+            if len(rows) == chunk_rows:
+                array = np.asarray(rows, dtype=object)
+                yield dict(zip(("SNP", "P", "N"), array.T))
+                rows = []
+        if rows:
+            array = np.asarray(rows, dtype=object)
+            yield dict(zip(("SNP", "P", "N"), array.T))
+
+
+_DECIMAL = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?\Z")
+
+
+def _number(value):
+    value = value.strip(" \t\r\n\v\f")
+    if _DECIMAL.fullmatch(value) or value.lower() in {
+        "inf",
+        "+inf",
+        "-inf",
+        "infinity",
+        "+infinity",
+        "-infinity",
+    }:
+        return float(value)
+    return np.nan
+
+
+def _numeric(values):
+    """Decimal conversion without accepting Python-only underscores or hex syntax."""
+    return np.fromiter((_number(value) for value in values), dtype=float, count=len(values))
+
+
 class TraitStore:
     """Three float64 arrays per trait: P, N, and precomputed chi-square values.
 
@@ -112,9 +206,7 @@ class TraitStore:
             raise ValueError("Model must be magma or whole")
         self.model = model
         self.traits = traits
-        self.index = snps if isinstance(snps, pd.Index) else pd.Index(snps)
-        if not len(self.index) or not self.index.is_unique:
-            raise ValueError("Reference SNP identifiers must be nonempty and unique")
+        self.index = snps if isinstance(snps, SnpIndex) else SnpIndex(snps)
         self.path = Path(directory) / "traits.f64"
         self.values = np.memmap(
             self.path, mode="w+", dtype="float64", shape=(len(traits), 3, len(snps))
@@ -129,17 +221,10 @@ class TraitStore:
             rows, matched, invalid = 0, 0, 0
             path = Path(pval_dir) / f"{trait}.pval"
             with _reference_rows(path, self.index, self.path.parent) as (input_path, total_rows):
-                chunks = pd.read_csv(
-                    input_path,
-                    sep=r"\s+",
-                    usecols=["SNP", "P", "N"],
-                    dtype=str,
-                    keep_default_na=False,
-                    chunksize=chunk_rows,
-                )
-                with chunks:
+                chunks = _input_chunks(input_path, chunk_rows, total_rows is not None)
+                try:
                     for chunk in chunks:
-                        rows += len(chunk)
+                        rows += len(chunk["SNP"])
                         position = self.index.get_indexer(chunk["SNP"])
                         present = position >= 0
                         position = position[present]
@@ -149,7 +234,7 @@ class TraitStore:
                         unique, first, counts = np.unique(
                             position, return_index=True, return_counts=True
                         )
-                        selected = chunk.loc[present, ["P", "N"]]
+                        selected = {name: chunk[name][present] for name in ("P", "N")}
                         if self.model == "magma":
                             # States: unread, accepted, duplicated, excluded. An excluded
                             # ID stays excluded; a repeat of an accepted ID is dropped
@@ -158,7 +243,9 @@ class TraitStore:
                             repeated = unique[seen[unique] == 1]
                             seen[repeated] = 2
                             ids = unique[unread]
-                            selected = selected.iloc[first[unread]]
+                            selected = {
+                                name: column[first[unread]] for name, column in selected.items()
+                            }
                             p, n, good = self._parse_rows(selected, path)
                             invalid += int((~good).sum())
                             seen[ids] = np.where(good, 1, 3)
@@ -171,6 +258,8 @@ class TraitStore:
                         good &= seen[ids] == 1
                         values[0, ids[good]], values[1, ids[good]] = p[good], n[good]
                         values[:, unique[seen[unique] == 2]] = np.nan
+                finally:
+                    chunks.close()
                 if total_rows is not None:
                     rows = total_rows
             usable = np.isfinite(values[0])
@@ -199,24 +288,25 @@ class TraitStore:
 
     def _parse_rows(self, rows, path):
         """Parse only rows that reach validation under the selected input model."""
-        p = pd.to_numeric(rows["P"], errors="coerce").to_numpy(dtype=float)
-        n = pd.to_numeric(rows["N"], errors="coerce").to_numpy(dtype=float)
+        p = _numeric(rows["P"])
+        n = _numeric(rows["N"])
         if self.model == "whole":
             good = np.isfinite(p) & np.isfinite(n) & (p > 0) & (p <= 1) & (n >= 50)
             return p, n, good
 
-        missing_p = rows["P"].isin(["NA", "-1"]).to_numpy()
+        missing_p = np.isin(rows["P"], ["NA", "-1"])
         invalid_p = ~missing_p & (~np.isfinite(p) | (p < 0) | (p > 1))
         if invalid_p.any():
-            raise ValueError(f"Invalid SNP P in {path}: {rows.loc[invalid_p, 'P'].iloc[0]!r}")
-        # C++ round rounds halfway cases away from zero. Sample sizes are positive.
+            raise ValueError(f"Invalid SNP P in {path}: {rows['P'][invalid_p][0]!r}")
+        # Match the official executable, including floating-point addition
+        # immediately below a half-integer. Positive sample sizes are rounded.
         n = np.copysign(np.floor(np.abs(n) + 0.5), n)
-        missing_n = rows["N"].eq("NA").to_numpy()
+        missing_n = rows["N"] == "NA"
         invalid_n = (
             ~missing_p & ~missing_n & (~np.isfinite(n) | (n < 0) | (n > np.iinfo(np.int32).max))
         )
         if invalid_n.any():
-            raise ValueError(f"Invalid SNP N in {path}: {rows.loc[invalid_n, 'N'].iloc[0]!r}")
+            raise ValueError(f"Invalid SNP N in {path}: {rows['N'][invalid_n][0]!r}")
         # MAGMA 1.10 applies a strict lower bound after rounding, so N=50 is dropped.
         good = ~missing_p & ~missing_n & (n > 50)
         return np.clip(p, 1e-50, 1 - 1e-5), n, good
@@ -227,6 +317,8 @@ class TraitStore:
 
 
 def read_gene_table(path):
+    import pandas as pd
+
     df = pd.read_csv(path, sep=r"\s+", dtype={"GENE": str}, keep_default_na=False)
     if not set(COLUMNS).issubset(df):
         raise ValueError(f"Missing output columns in {path}")

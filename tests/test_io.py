@@ -206,3 +206,160 @@ def test_reference_filter_preserves_unusual_whitespace_qc(tmp_path, monkeypatch,
         assert qc["a"]["rows"] == 2
     finally:
         store.close()
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "0",
+        "-0",
+        "+.1",
+        "1.",
+        " .1 ",
+        "\t.1\t",
+        "1e-320",
+        "4.9406564584124654e-324",
+        "1.7976931348623157e308",
+        "1e309",
+        "1.e-320",
+        "+1e+20",
+        "1_0",
+        "0x1",
+        "nan",
+        "NaN",
+        "inf",
+        "+Inf",
+        "-Infinity",
+        "NA",
+        "",
+        "\u00a0.1\u00a0",
+    ],
+)
+def test_numeric_parser_matches_decimal_acceptance(text):
+    import pandas as pd
+    from fastmagma.io import _numeric
+
+    expected = pd.to_numeric(pd.Series([text]), errors="coerce").to_numpy(dtype=float)
+    actual = _numeric(np.asarray([text], dtype=object))
+    # pandas versions differ on overflow (NaN versus infinity); both are
+    # rejected by QC. Require matching finite acceptance and finite values.
+    np.testing.assert_array_equal(np.isfinite(actual), np.isfinite(expected))
+    finite = np.isfinite(expected)
+    np.testing.assert_allclose(actual[finite], expected[finite], rtol=1e-14, atol=0)
+
+
+def test_quoted_numeric_whitespace_preserves_qc(tmp_path):
+    (tmp_path / "a.pval").write_text('SNP P N\nr1 " .2 " " 100 "\n')
+    store = TraitStore(tmp_path, ["a"], ["r1"], model="magma")
+    try:
+        store.load(tmp_path, 100)
+        assert store.values[0, 0, 0] == 0.2
+        assert store.values[0, 1, 0] == 100
+    finally:
+        store.close()
+
+
+def test_plain_trait_loading_does_not_import_pandas(tmp_path):
+    import subprocess
+    import sys
+
+    (tmp_path / "a.pval").write_text("SNP P N\nr1 .2 100\n")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; from fastmagma.io import TraitStore; "
+            "store = TraitStore(sys.argv[1], ['a'], ['r1']); "
+            "store.load(sys.argv[1], 100); store.close(); "
+            "assert 'pandas' not in sys.modules",
+            str(tmp_path),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_snp_index_reuses_single_lookup(tmp_path):
+    from fastmagma.io import SnpIndex
+
+    index = SnpIndex(["r2", "r1"])
+    np.testing.assert_array_equal(index.get_indexer(["r1", "missing", "r2"]), [1, -1, 0])
+    store = TraitStore(tmp_path, ["a"], index)
+    try:
+        assert store.index is index
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize(
+    "content,error",
+    [
+        ("22\t\t0\t1\tA\tC\n", "nonempty"),
+        ("22\tr1\t0\t1\tA\tC\n22\tr1\t0\t2\tA\tC\n", "unique"),
+        ("21\tr1\t0\t1\tA\tC\n", "chromosome"),
+        ("22\n", "Malformed BIM"),
+    ],
+)
+def test_streamed_reference_index_rejects_invalid_metadata(tmp_path, content, error):
+    from fastmagma.io import load_reference_index
+
+    path = tmp_path / "reference.bim"
+    path.write_text(content)
+    with pytest.raises(ValueError, match=error):
+        load_reference_index(path, 22)
+
+
+def test_streamed_reference_index_preserves_order_and_ignores_unused_fields(tmp_path):
+    from fastmagma.io import load_reference_index
+
+    path = tmp_path / "reference.bim"
+    path.write_text("# comment\n\n22\tr2\tbad\tbad\tA\tC\n22\tr1\t0\t1\tA\tC # comment\n")
+    index = load_reference_index(path, 22)
+    assert list(index) == ["r2", "r1"]
+    np.testing.assert_array_equal(index.get_indexer(["r1", "r2"]), [1, 0])
+
+
+@pytest.mark.parametrize(
+    "value,rounded",
+    [
+        (np.nextafter(0.5, 0), 1),
+        (0.5, 1),
+        (np.nextafter(0.5, 1), 1),
+        (np.nextafter(-0.5, 0), -1),
+        (np.nextafter(50.5, 0), 50),
+        (50.5, 51),
+        (np.nextafter(50.5, 51), 51),
+    ],
+)
+def test_magma_rounding_adjacent_to_halfway_values(tmp_path, value, rounded):
+    store = TraitStore(tmp_path, ["a"], ["r1"], model="magma")
+    try:
+        if rounded < 0:
+            with pytest.raises(ValueError, match="Invalid SNP N"):
+                store._parse_rows(
+                    {"P": np.array([".1"]), "N": np.array([repr(float(value))])},
+                    tmp_path,
+                )
+            return
+        _, n, good = store._parse_rows(
+            {"P": np.array([".1"]), "N": np.array([repr(float(value))])},
+            tmp_path,
+        )
+        assert n[0] == rounded
+        assert good[0] == (rounded > 50)
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("value", [-0.5, np.nextafter(-0.5, -1)])
+def test_magma_negative_halfway_rounds_away_from_zero(tmp_path, value):
+    store = TraitStore(tmp_path, ["a"], ["r1"], model="magma")
+    try:
+        with pytest.raises(ValueError, match="Invalid SNP N"):
+            store._parse_rows(
+                {"P": np.array([".1"]), "N": np.array([repr(float(value))])},
+                tmp_path,
+            )
+    finally:
+        store.close()

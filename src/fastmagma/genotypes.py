@@ -12,16 +12,22 @@ def normalize_genotypes(raw):
     return g, keep
 
 
-def _normalize_genotypes(raw):
+def _normalize_genotypes(raw, *, copy=True):
     """Normalize once, retaining the sufficient information for both QC policies."""
-    g = np.array(raw, dtype=np.float64, copy=True, order="F")
-    valid = np.isfinite(g)
-    if np.any(~valid & ~np.isnan(g)):
+    g = np.array(raw, dtype=np.float64, copy=copy, order="F")
+    missing = np.isnan(g)
+    if np.isinf(g).any():
         raise ValueError("Genotype calls must be finite or NaN")
-    count = valid.sum(axis=0)
-    mean = np.divide(np.nansum(g, axis=0), count, out=np.zeros(g.shape[1]), where=count > 0)
-    g -= mean
-    g[~valid] = 0
+    if missing.any():
+        count = g.shape[0] - missing.sum(axis=0)
+        g[missing] = 0
+        mean = np.divide(g.sum(axis=0), count, out=np.zeros(g.shape[1]), where=count > 0)
+        g -= mean
+        g[missing] = 0
+    else:
+        missing = None
+        count = np.full(g.shape[1], g.shape[0])
+        g -= g.mean(axis=0) if g.shape[0] else 0
     lengths = np.sqrt(np.einsum("ij,ij->j", g, g))
     keep = (count >= 2) & (lengths > 1e-12)
     np.divide(g, lengths, out=g, where=keep[None, :])
@@ -30,7 +36,7 @@ def _normalize_genotypes(raw):
     variance *= g.shape[0] / max(g.shape[0] - 1, 1)
     # --pval activates reduced reference-panel QC in MAGMA (25%, not 5%).
     magma_keep = keep & (count >= 0.75 * g.shape[0]) & (variance > 1e-8)
-    return g, keep, ~valid, magma_keep
+    return g, keep, missing, magma_keep
 
 
 class GenotypeReader:
@@ -52,12 +58,12 @@ class GenotypeReader:
         start = number * self.block_snps
         stop = min(start + self.block_snps, self.bed.sid_count)
         raw = self.bed.read(index=np.s_[:, start:stop], dtype="float64", num_threads=self.threads)
-        block = _normalize_genotypes(raw)
+        block = _normalize_genotypes(raw, copy=False)
         self.block_reads += 1
-        size = sum(x.nbytes for x in block)
+        size = sum(x.nbytes for x in block if x is not None)
         while self.cache and self.cache_bytes + size > self.capacity:
             _, old = self.cache.popitem(last=False)
-            self.cache_bytes -= sum(x.nbytes for x in old)
+            self.cache_bytes -= sum(x.nbytes for x in old if x is not None)
         if size <= self.capacity:
             self.cache[number] = block
             self.cache_bytes += size
@@ -81,7 +87,7 @@ class GenotypeReader:
         indices = np.asarray(indices, dtype=np.int64)
         g = np.empty((self.bed.iid_count, len(indices)), dtype=np.float64, order="F")
         keep = np.empty(len(indices), dtype=bool)
-        missing = np.empty(g.shape, dtype=bool, order="F")
+        missing = None
         blocks = indices // self.block_snps
         for number in np.unique(blocks):
             select = np.flatnonzero(blocks == number)
@@ -91,9 +97,17 @@ class GenotypeReader:
                 block_keep = magma_keep
             g[:, select] = block[:, local]
             keep[select] = block_keep[local]
-            missing[:, select] = block_missing[:, local]
-        missing = missing[:, keep]
-        return g[:, keep], keep, missing if missing.any() else None
+            if block_missing is not None:
+                selected_missing = block_missing[:, local]
+                if selected_missing.any():
+                    if missing is None:
+                        missing = np.zeros(g.shape, dtype=bool, order="F")
+                    missing[:, select] = selected_missing
+        if not keep.all():
+            g = g[:, keep]
+            if missing is not None:
+                missing = missing[:, keep]
+        return g, keep, missing if missing is not None and missing.any() else None
 
 
 def workspace_bytes(n_samples, n_snps, block_snps=256):

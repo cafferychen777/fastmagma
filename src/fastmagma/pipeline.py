@@ -15,7 +15,6 @@ import time
 
 from bed_reader import open_bed
 import numpy as np
-import pandas as pd
 from threadpoolctl import threadpool_limits
 
 from .blocks import prepare_gene
@@ -24,6 +23,7 @@ from .io import (
     COLUMNS,
     TraitStore,
     load_annotation,
+    load_reference_index,
     parse_chromosomes,
     parse_traits,
     read_gene_table,
@@ -104,11 +104,12 @@ def run_chromosome(args):
     input_paths = [f"{bfile}.{ext}" for ext in ("bed", "bim", "fam")]
     input_paths += [args.annot] + [str(Path(args.pval_dir) / f"{t}.pval") for t in traits]
     records = [_input_record(p) for p in input_paths]
-    # Only SNP identity and chromosome are needed; avoid materializing unused
-    # PLINK sample labels, allele strings, and physical/genetic positions.
+    snps = load_reference_index(f"{bfile}.bim", chrom)
+    # The shared lookup owns SNP metadata; skip all PLINK property arrays.
     bed = open_bed(
         f"{bfile}.bed",
         count_A1=False,
+        sid_count=len(snps),
         num_threads=args.threads,
         properties=dict.fromkeys(
             (
@@ -118,6 +119,8 @@ def run_chromosome(args):
                 "mother",
                 "sex",
                 "pheno",
+                "sid",
+                "chromosome",
                 "cm_position",
                 "bp_position",
                 "allele_1",
@@ -130,11 +133,6 @@ def run_chromosome(args):
         raise ValueError(
             f"The {model} model requires at least {minimum_samples} reference individuals"
         )
-    snps = pd.Index(bed.sid)
-    if snps.empty or not snps.is_unique or (snps == "").any():
-        raise ValueError("Reference SNP IDs must be unique and nonempty")
-    if any(str(c) != str(chrom) for c in bed.chromosome):
-        raise ValueError("PLINK reference contains unexpected chromosome labels")
     genes = load_annotation(args.annot, chrom)
     if not any((snps.get_indexer(gene.snps) >= 0).any() for gene in genes):
         raise ValueError("No annotated SNPs occur in the reference panel")
@@ -263,6 +261,8 @@ def run_chromosome(args):
 
 
 def merge_chromosomes(args):
+    import pandas as pd
+
     traits = parse_traits(args.traits)
     chromosomes = parse_chromosomes(args.chrs)
     out = Path(args.out_dir)

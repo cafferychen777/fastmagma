@@ -291,7 +291,11 @@ def test_native_tilted_matches_original_numpy_quadrature(monkeypatch, rank, fact
 
         return component
 
-    monkeypatch.setattr(stats._native, "tilted_integrand", reference_factory)
+    monkeypatch.setattr(
+        stats._native,
+        "tilted_integrands",
+        lambda beta, h: (reference_factory(beta, h, False), reference_factory(beta, h, True)),
+    )
     monkeypatch.setattr(stats, "LowLevelCallable", lambda callback: callback)
     reference = stats.tilted_logsf(q, lam)
     assert native == pytest.approx(reference, rel=2e-12, abs=2e-11)
@@ -358,3 +362,34 @@ def test_native_imhof_matches_original_numpy_quadrature(monkeypatch, q):
     monkeypatch.setattr(stats, "LowLevelCallable", lambda callback: callback)
     reference, _ = stats.imhof_survival(q, lam)
     assert native == pytest.approx(reference, abs=2e-12)
+
+
+@pytest.mark.parametrize("rank", [2, 3, 10, 30, 100, 244])
+@pytest.mark.parametrize("factor", [0.1, 1.0, 3.0, 10.0])
+def test_shared_node_cache_preserves_quadrature_exactly(monkeypatch, rank, factor):
+    lam = np.geomspace(1, 0.001, rank)
+    q = factor * lam.sum()
+    cached = stats.tilted_logsf(q, lam)
+    monkeypatch.setattr(
+        stats._native,
+        "tilted_integrands",
+        lambda beta, h: (
+            stats._native.tilted_integrand(beta, h, False),
+            stats._native.tilted_integrand(beta, h, True),
+        ),
+    )
+    assert stats.tilted_logsf(q, lam) == cached
+
+
+def test_shared_node_cache_survives_releasing_either_callback():
+    import gc
+
+    from scipy import LowLevelCallable
+
+    for index in (0, 1):
+        callbacks = stats._native.tilted_integrands(np.array([0.1, 0.5, 1.0]), 0.3)
+        survivor = LowLevelCallable(callbacks[index])
+        expected = integrate.quad(survivor, 0, 1)[0]
+        del callbacks
+        gc.collect()
+        assert integrate.quad(survivor, 0, 1)[0] == expected
