@@ -1,5 +1,9 @@
 # Runtime comparison with MAGMA
 
+These measurements predate the rename to MAGMA-py. Archived benchmark JSON and
+output files retain their original `fastmagma` labels and `.fastmagma.tsv` suffix;
+the renamed benchmark scripts produce `magma_py` labels and `.magma_py.tsv` files.
+
 The current implementation (commit `6b43874`) improves both runtime and peak
 memory against the previous optimized release, R2, when rerun in the same
 compute allocation. Prefiltered single CAD fell from **5.11 to 4.76 s** and
@@ -10,19 +14,19 @@ runtime and peak memory, including the full original GWAS inputs.
 
 MAGMA remained faster and smaller for the single traits: **4.20 s / 24 MiB**
 for CAD and **1.32 s / 16 MiB** for AD. The different-SNP pair was close to
-parity. For the full original GWAS pair, fastmagma took **8.46 s** versus
+parity. For the full original GWAS pair, MAGMA-py took **8.46 s** versus
 MAGMA's **11.37 s**, a **1.34×** speed ratio on this workload. These results
 do not establish a general speed advantage over MAGMA.
 
 ## Same-allocation comparison
 
-Job `2695497` ran current fastmagma, previous R2 fastmagma, and MAGMA on node
+Job `2695497` ran current MAGMA-py, previous R2 MAGMA-py, and MAGMA on node
 `c03` with the same one-CPU allocation, inputs, thread settings, cache warming,
 and fresh-process measurement. Previous/current execution order alternated
 across three repetitions for every workload. Wall seconds below are medians,
 with observed ranges in brackets.
 
-| Workload | Previous R2 fastmagma | Current fastmagma | Paired MAGMA |
+| Workload | Previous R2 MAGMA-py | Current MAGMA-py | Paired MAGMA |
 | --- | ---: | ---: | ---: |
 | Single CAD | 5.11 [5.10–5.13] | 4.76 [4.74–4.79] | 4.20 [4.20–4.24] |
 | Single AD | 2.38 [2.36–2.45] | 2.27 [2.23–2.28] | 1.32 [1.32–1.34] |
@@ -33,7 +37,7 @@ with observed ranges in brackets.
 Peak RSS in MiB is the median of each repetition's process peak, with observed
 ranges. A serial multi-trait run uses its largest process peak, not their sum.
 
-| Workload | Previous R2 fastmagma | Current fastmagma | Paired MAGMA |
+| Workload | Previous R2 MAGMA-py | Current MAGMA-py | Paired MAGMA |
 | --- | ---: | ---: | ---: |
 | Single CAD | 153.64 [153.64–157.10] | 138.16 [134.89–139.52] | 24.05 [23.00–24.58] |
 | Single AD | 134.03 [131.48–134.35] | 116.76 [115.77–119.62] | 15.77 [15.42–16.12] |
@@ -49,7 +53,7 @@ and delaying analysis imports until input loading finished produced the memory
 reduction reported here.
 
 The shared pair took **2.81 s** batched versus **4.53 s** in two independent
-fastmagma processes: a **1.61×** within-program speedup, or **37.9% less elapsed
+MAGMA-py processes: a **1.61×** within-program speedup, or **37.9% less elapsed
 time**. Eigendecompositions fell from **2,206 to 1,103** in every repetition.
 This demonstrates reuse, but its timing benefit also includes avoided startup,
 imports, and input work.
@@ -93,7 +97,7 @@ model, SNP selection, integration tolerances, and fallback criteria are unchange
 
 An independent 35-case two-weight integration check had maximum relative
 probability error **1.36e-12**. Across all five real workloads, current and
-original fastmagma outputs retained identical gene sets, NSNPS, NPARAM, N, and
+original MAGMA-py outputs retained identical gene sets, NSNPS, NPARAM, N, and
 PMETHOD. The largest absolute Z change was **1.88e-9** and the largest absolute
 P change **6.75e-10**. If shared-node quadrature misses its error criterion, the
 same integral is retried uncached at the same tolerances before the existing
@@ -124,8 +128,8 @@ those files. The full GWAS workload includes each program's scanning and parsing
 of the original genome-wide inputs, while its gene analysis still covers only
 chromosome 22.
 
-The shared SNP pair additionally compares batched fastmagma with two independent,
-serial fastmagma invocations using exactly the same shared input files. The
+The shared SNP pair additionally compares batched MAGMA-py with two independent,
+serial MAGMA-py invocations using exactly the same shared input files. The
 reported eigendecomposition counts show whether LD preparation is reused.
 The runtime difference also includes savings from process startup, imports,
 input handling, and other shared work; it cannot all be attributed to LD reuse.
@@ -133,12 +137,12 @@ input handling, and other shared work; it cannot all be attributed to LD reuse.
 ## Measurement
 
 - Arseven Slurm job `2695497`, node `c03`: one allocated CPU and a 3 GiB memory
-  limit. R2 and current fastmagma were both run within this allocation for all
+  limit. R2 and current MAGMA-py were both run within this allocation for all
   five workloads, alongside MAGMA.
 - Recorded CPU affinity was logical CPUs `2,130`. One thread is configured for
-  fastmagma and the BLAS/OpenMP environment of both programs. MAGMA uses one
+  MAGMA-py and the BLAS/OpenMP environment of both programs. MAGMA uses one
   process per trait.
-- Three paired repetitions per workload. MAGMA and fastmagma run in alternating
+- Three paired repetitions per workload. MAGMA and MAGMA-py run in alternating
   order; the shared-input serial control rotates through the three positions.
   Benchmark processes run serially within the allocation.
 - All command inputs are read immediately before each timed process to warm the
@@ -147,7 +151,7 @@ input handling, and other shared work; it cannot all be attributed to LD reuse.
 - Each timed invocation is a fresh process. Timing includes startup, library
   imports, input parsing, statistical computation, and writing gene results.
 - MAGMA uses `--genes-only` to suppress gene–gene correlation computation, which
-  fastmagma does not provide. Both programs use their default SNP-wise mean
+  MAGMA-py does not provide. Both programs use their default SNP-wise mean
   gene-analysis model. Neither annotation generation nor cross-chromosome
   merging is included.
 - A fresh, standard-library-only Python wrapper uses `os.wait4` to obtain the
@@ -184,14 +188,14 @@ calculations. The independent checks in [VALIDATION.md](VALIDATION.md) explain
 previously identified small-gene differences. The larger shared-input CAD
 difference has now also been independently resolved: for gene **56659**, angular
 integration and inverse Laplace inversion agree on **P = 5.49110465704e-5**.
-fastmagma agrees to relative error **5.33e-15**, whereas MAGMA reports
+MAGMA-py agrees to relative error **5.33e-15**, whereas MAGMA reports
 **5.7882e-5**, approximately **5.41% higher**.
 
 A separate oracle run (`2695177`) examined this CAD case and four sparse-input
 LDL cases: genes **55839, 56534, 56629, and 56846**. De Hoog and Talbot inverse
 Laplace methods agreed at 50- and 80-digit precision; independent angular
 integration also agreed for the four rank-two/rank-three cases. Across all five,
-fastmagma's maximum relative P error was **1.26e-13**. For example, LDL gene
+MAGMA-py's maximum relative P error was **1.26e-13**. For example, LDL gene
 56534 has oracle P **1.52664018918e-16**, while MAGMA reports **5e-10**. These
 results identify numerical probability error in the official outputs for these
 specific cases. They do not diagnose every discrepancy in the larger
@@ -206,14 +210,14 @@ of 1, 2, 4, and 8 traits use prefixes of this list on the same fixed SNP set,
 retaining each trait's observed P/N values. Preparation is outside timing.
 These measurements must not be combined with current timings as one scaling curve.
 
-| Traits | R1 fastmagma, seconds | MAGMA, seconds | R1 fastmagma peak MiB | MAGMA peak MiB |
+| Traits | R1 MAGMA-py, seconds | MAGMA, seconds | R1 MAGMA-py peak MiB | MAGMA peak MiB |
 | --- | ---: | ---: | ---: | ---: |
 | 1 | 1.78 [1.78–1.79] | 0.25 [0.25–0.25] | 212.19 [211.27–213.24] | 14.35 [13.79–14.62] |
 | 2 | 2.10 [1.96–2.41] | 59.26 [58.51–59.79] | 215.57 [214.91–216.51] | 54.56 [53.21–55.04] |
 | 4 | 2.23 [2.21–2.63] | 67.01 [66.99–69.11] | 222.59 [222.46–226.20] | 53.36 [53.09–53.92] |
 | 8 | 2.75 [2.71–2.79] | 160.33 [158.68–160.33] | 240.19 [238.35–242.14] | 53.02 [52.79–53.96] |
 
-Eight batched traits took **2.75 s** versus **14.78 s** for serial R1 fastmagma
+Eight batched traits took **2.75 s** versus **14.78 s** for serial R1 MAGMA-py
 (**5.38×**), with eigendecompositions reduced from **3,040 to 380**. However,
 the large advantage over MAGMA is strongly influenced by numerical probability
 cost: the sparse LDL run alone took about 59 seconds. This is not a measure of
@@ -230,7 +234,7 @@ from these tables; no aggregate timing is claimed for it.
 
 ## Reproduction
 
-Run the benchmark on a compute allocation with one CPU, the installed fastmagma
+Run the benchmark on a compute allocation with one CPU, the installed MAGMA-py
 package and dependencies, and the official MAGMA executable. The script imports
 its existing output-comparison helper from the same `benchmarks` directory.
 
@@ -269,7 +273,7 @@ dependency `mpmath` and provide a JSON list identifying exact input/output files
   "trait": "cad", "gene": "56659",
   "annotation": "/path/to/chr22.genes.annot",
   "pval": "/path/to/shared/cad.pval",
-  "fast": "/path/to/cad.chr22.fastmagma.tsv",
+  "fast": "/path/to/cad.chr22.magma_py.tsv",
   "official": "/path/to/cad.genes.out"
 }]
 ```

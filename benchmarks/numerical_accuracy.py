@@ -7,7 +7,7 @@ from pathlib import Path
 
 from scipy.integrate import quad
 
-from fastmagma.stats import gene_test
+from magma_py.stats import gene_test
 
 
 def main():

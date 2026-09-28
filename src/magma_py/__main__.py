@@ -1,4 +1,4 @@
-"""Run fastmagma as a module."""
+"""Run magma_py as a module."""
 
 from .cli import main
 

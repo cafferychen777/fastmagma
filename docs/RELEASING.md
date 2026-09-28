@@ -25,8 +25,8 @@ Local execution of a CI-equivalent command does not mean a hosted CI run passed.
 
 - The SPDX license expression and LICENSE file are included in package metadata.
 - Maintainer contact is present. Retain the source copyright notice.
-- Create/verify the standalone repository and then add real Repository, Issues,
-  and Documentation URLs to `pyproject.toml`. Do not publish invented URLs.
+- Verify that the Repository, Issues, and Documentation URLs in `pyproject.toml`
+  resolve to the standalone `cafferychen777/magma-py` repository.
 - Verify package-name availability with PyPI at upload time; an API 404 is not
   a reservation and does not establish that an account can register that name.
 - Configure a PyPI/TestPyPI API token or Trusted Publisher using the account owner.
@@ -39,7 +39,7 @@ python -m twine upload --repository testpypi dist/*
 ```
 
 Install the exact TestPyPI artifact into a new environment. Install dependencies
-from PyPI first, then install fastmagma with `--no-deps` and TestPyPI as its sole
+from PyPI first, then install `magma-py` with `--no-deps` and TestPyPI as its sole
 index. Run the installed-package smoke tests again. Production upload is separate:
 
 ```bash

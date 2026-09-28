@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from scipy import integrate, special
 
-from fastmagma import stats
+from magma_py import stats
 
 
 @pytest.mark.parametrize("k", [1, 2, 5, 20, 100])

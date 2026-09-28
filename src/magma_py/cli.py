@@ -21,8 +21,10 @@ def _nonnegative(value):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Multi-trait SNP-wise mean gene analysis")
-    parser.add_argument("--version", action="version", version=f"%(prog)s {version('fastmagma')}")
+    parser = argparse.ArgumentParser(
+        prog="magma-py", description="MAGMA-py: multi-trait SNP-wise mean gene analysis"
+    )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {version('magma-py')}")
     commands = parser.add_subparsers(dest="command", required=True)
     run = commands.add_parser("run", help="Analyze one autosome across traits")
     run.add_argument("--chr", type=int, choices=range(1, 23), required=True)
@@ -77,6 +79,6 @@ def main(argv=None):
         with locked_outputs(args.out_dir, chromosomes, merging=args.command == "merge"):
             (run_chromosome if args.command == "run" else merge_chromosomes)(args)
     except (ValueError, OSError, ArithmeticError, MemoryError, RuntimeError) as exc:
-        print(f"fastmagma: error: {exc}", file=sys.stderr)
+        print(f"magma-py: error: {exc}", file=sys.stderr)
         return 1
     return 0

@@ -8,7 +8,7 @@ import pandas as pd
 from scipy.special import ndtri_exp
 import numpy as np
 
-from fastmagma.io import COLUMNS
+from magma_py.io import COLUMNS
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 
@@ -21,7 +21,7 @@ def test_mapping_and_comparison(tmp_path):
         )
     frame = pd.DataFrame(rows, columns=COLUMNS)
     frame.to_csv(tmp_path / "x.genes.out", sep="\t", index=False)
-    frame.to_csv(tmp_path / "x.chr22.fastmagma.tsv", sep="\t", index=False)
+    frame.to_csv(tmp_path / "x.chr22.magma_py.tsv", sep="\t", index=False)
     (tmp_path / "x").mkdir()
     frame.to_csv(tmp_path / "x/x.batch22_chr.genes.out", sep="\t", index=False)
     (tmp_path / "map.tsv").write_text(

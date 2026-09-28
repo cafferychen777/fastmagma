@@ -26,21 +26,21 @@ fallbacks remain explicitly labeled in `PMETHOD`.
 ### Independent resolution of small-gene discrepancies
 
 Slurm job 2680538 reran three real AD genes with official MAGMA v1.10 and
-fastmagma. An independent oracle integrates radial chi-square survival over
+MAGMA-py. An independent oracle integrates radial chi-square survival over
 sphere directions, without using either program's characteristic-function
 solver. Gauss-Legendre orders 64, 128, 256 and 512 were checked against adaptive
 angular integration. All reference calls in these genes are complete.
 
-| Gene | SNPs | Independent P | fastmagma P | Official MAGMA P |
+| Gene | SNPs | Independent P | MAGMA-py P | Official MAGMA P |
 |---|---:|---:|---:|---:|
 | 56632 | 3 | 0.4416564273703677 | 0.4416564273703657 | 0.44157 |
 | 56733 | 3 | 0.0003204600674659268 | 0.0003204600674659 | 0.00031782 |
 | 56734 | 2 | 0.0010524892233385215 | 0.0010524892233385 | 0.0010445 |
 
 The 512-point and adaptive answers agree within 4.5e-16 absolute. These cases
-resolve the largest remaining AD discrepancies: fastmagma agrees with the
+resolve the largest remaining AD discrepancies: MAGMA-py agrees with the
 independent probabilities; the official numerical integration is less accurate.
-Changing fastmagma to reproduce these official values would introduce error.
+Changing MAGMA-py to reproduce these official values would introduce error.
 
 ### Additional tails exposed by the runtime experiments
 
@@ -48,7 +48,7 @@ The shared-SNP benchmark exposed a larger CAD residual and strong sparse LDL
 signals. Jobs `2695177` and `2695183` checked five selected genes with independent
 inverse Laplace calculations (de Hoog and Talbot, each at 50 and 80 decimal
 digits). The four retained-rank-two/three cases also agreed with independent
-angular integration. Maximum fastmagma relative P error was 1.26e-13.
+angular integration. Maximum MAGMA-py relative P error was 1.26e-13.
 
 | Trait / gene | Independent P | Official MAGMA P |
 |---|---:|---:|
@@ -58,7 +58,7 @@ angular integration. Maximum fastmagma relative P error was 1.26e-13.
 | Sparse LDL / 56629 | 2.36848058663330e-4 | 1.777e-4 |
 | Shared CAD / 56659 | 5.49110465704017e-5 | 5.7882e-5 |
 
-These calculations resolve the checked discrepancies in favor of fastmagma;
+These calculations resolve the checked discrepancies in favor of MAGMA-py;
 they do not diagnose every difference in the extended benchmarks. The portable
 [tail oracle](../benchmarks/validate_tail_probabilities.py) reconstructs each
 unblocked gene's LD and checks numerical convergence. `NPARAM` is a moment-based
@@ -74,7 +74,7 @@ The current streamed-annotation and native-parser revision repeated all 36 in jo
 or immediately around -0.5). Exit-code numbers differ; rejection behavior
 agrees. All accepted cases have exact gene/NSNPS/NPARAM/N agreement; maximum
 absolute P difference was **4.5762e-6**. The three AD oracles passed again, with
-maximum absolute fastmagma error **2.00e-15**. The 35-case grid again had maximum
+maximum absolute MAGMA-py error **2.00e-15**. The 35-case grid again had maximum
 relative error **1.3592e-12**.
 
 A focused official-executable probe (`2695467`) verified negative sample-size
@@ -105,7 +105,7 @@ The summary-statistic missing-call cutoff is 25%; MAGMA's generic 5% QC default
 does not apply to its reduced-QC `--pval` path.
 
 Extreme-P agreement must not be interpreted as relative numerical equivalence:
-the official integral can floor probabilities near 3.9e-16 while fastmagma
+the official integral can floor probabilities near 3.9e-16 while MAGMA-py
 preserves much smaller tails. See [algorithm scope](ALGORITHM.md).
 
 ## Engineering and package checks
@@ -137,7 +137,7 @@ half-boundary compatibility difference. Ruff and strict Twine checks pass.
 The minimum dependency set is NumPy 1.24.0, pandas 2.0.0, SciPy 1.10.0,
 bed-reader 1.0.0 and threadpoolctl 3.1.0.
 
-Hosted [CI run 36457729357](https://github.com/cafferychen777/fastmagma/actions/runs/36457729357)
+Hosted [CI run 36457729357](https://github.com/cafferychen777/magma-py/actions/runs/36457729357)
 passed all 15 Linux/macOS/Windows and Python 3.10–3.14 combinations, including
 installed-wheel tests, plus the minimum-dependency job at `6b43874`.
 
@@ -209,7 +209,7 @@ python benchmarks/validate_boundaries.py --magma /path/to/magma \
   --bfile /path/to/reference.22 --annot /path/to/genes.annot \
   --ad-pval /path/to/ad.pval --out-dir results/boundary_validation
 python benchmarks/validate_block_compatibility.py \
-  --fast-dir /path/to/fastmagma/output --official-dir /path/to/official/output \
+  --fast-dir /path/to/magma-py/output --official-dir /path/to/official/output \
   --out-dir results/comparison
 ```
 

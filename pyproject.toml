@@ -3,7 +3,7 @@ requires = ["setuptools>=77.0.3"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "fastmagma"
+name = "magma-py"
 version = "0.1.0"
 description = "Multi-trait SNP-wise mean gene analysis from GWAS summary statistics"
 readme = "README.md"
@@ -27,10 +27,15 @@ dependencies = ["numpy>=1.24", "pandas>=2.0", "scipy>=1.10", "bed-reader>=1.0", 
 
 [project.optional-dependencies]
 test = ["pytest>=7", "pytest-cov>=4", "mpmath>=1.3"]
-dev = ["fastmagma[test]", "build>=1", "twine>=6", "ruff>=0.11"]
+dev = ["magma-py[test]", "build>=1", "twine>=6", "ruff>=0.11"]
+
+[project.urls]
+Repository = "https://github.com/cafferychen777/magma-py"
+Issues = "https://github.com/cafferychen777/magma-py/issues"
+Documentation = "https://github.com/cafferychen777/magma-py#readme"
 
 [project.scripts]
-fastmagma = "fastmagma.cli:main"
+magma-py = "magma_py.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

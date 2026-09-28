@@ -1,9 +1,9 @@
-"""Measure paired MAGMA/fastmagma runtime on one serial compute allocation.
+"""Measure paired MAGMA/MAGMA-py runtime on one serial compute allocation.
 
 Input preparation and explicit filesystem-cache warming are outside timing.
 Each fresh CLI process includes imports, input parsing, analysis, and output.
 Official multi-trait runs are serial; their wall/CPU times are summed and their
-peak RSS is the maximum, not the sum. Shared-input fastmagma also runs serially
+peak RSS is the maximum, not the sum. Shared-input MAGMA-py also runs serially
 as a within-program control for the benefit of batching and LD reuse.
 """
 
@@ -130,7 +130,7 @@ def run_tool(args, tool, scenario, traits, pval_dir, annotation, repetition):
     common_inputs = [Path(str(args.bfile) + suffix) for suffix in (".bed", ".bim", ".fam")]
     common_inputs.append(annotation)
     measurements, outputs, resources = [], {}, []
-    groups = [traits] if tool == "fastmagma" else [[trait] for trait in traits]
+    groups = [traits] if tool == "magma_py" else [[trait] for trait in traits]
     for index, group in enumerate(groups):
         output = directory / f"part{index}"
         inputs = common_inputs + [pval_dir / f"{trait}.pval" for trait in group]
@@ -154,7 +154,7 @@ def run_tool(args, tool, scenario, traits, pval_dir, annotation, repetition):
             command = [
                 sys.executable,
                 "-m",
-                "fastmagma",
+                "magma_py",
                 "run",
                 "--chr",
                 "22",
@@ -172,7 +172,7 @@ def run_tool(args, tool, scenario, traits, pval_dir, annotation, repetition):
                 str(args.threads),
                 "--overwrite",
             ]
-            outputs.update({trait: str(output / f"{trait}.chr22.fastmagma.tsv") for trait in group})
+            outputs.update({trait: str(output / f"{trait}.chr22.magma_py.tsv") for trait in group})
         measurements.append(timed(command, directory / f"process{index}", inputs))
         if tool != "magma":
             resources.append(json.loads((output / "chr22.manifest.json").read_text())["resources"])
@@ -204,15 +204,15 @@ def summarize(records):
                 )
                 for metric in ("wall_seconds", "cpu_seconds", "max_rss_kib")
             }
-        if "magma" in summary and "fastmagma" in summary:
+        if "magma" in summary and "magma_py" in summary:
             summary["speedup_median_times"] = (
                 summary["magma"]["wall_seconds"]["median"]
-                / summary["fastmagma"]["wall_seconds"]["median"]
+                / summary["magma_py"]["wall_seconds"]["median"]
             )
-        if "fast_serial" in summary and "fastmagma" in summary:
+        if "fast_serial" in summary and "magma_py" in summary:
             summary["batching_speedup_median_times"] = (
                 summary["fast_serial"]["wall_seconds"]["median"]
-                / summary["fastmagma"]["wall_seconds"]["median"]
+                / summary["magma_py"]["wall_seconds"]["median"]
             )
         summaries[scenario] = summary
     return summaries
@@ -270,7 +270,7 @@ def main():
     for scenario, traits, pval_dir in scenarios:
         for repetition in range(1, args.repetitions + 1):
             record = results["records"].setdefault(scenario, {}).setdefault(str(repetition), {})
-            order = ["magma", "fastmagma"] if repetition % 2 else ["fastmagma", "magma"]
+            order = ["magma", "magma_py"] if repetition % 2 else ["magma_py", "magma"]
             if scenario == "pair_shared":
                 order.insert((repetition - 1) % 3, "fast_serial")
             for tool in order:
@@ -294,7 +294,7 @@ def main():
                     flush=True,
                 )
             record["comparisons"] = {}
-            for tool in ("fastmagma", "fast_serial"):
+            for tool in ("magma_py", "fast_serial"):
                 if tool not in record:
                     continue
                 record["comparisons"][tool] = {}

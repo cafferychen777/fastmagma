@@ -22,8 +22,8 @@ TRAITS = ["cad", "ldl", "t2d", "bmi", "tg", "scz", "sbp", "dbp"]
 def prepare(args):
     import numpy as np
 
-    from fastmagma._input import filter_pval
-    from fastmagma.io import TraitStore
+    from magma_py._input import filter_pval
+    from magma_py.io import TraitStore
 
     traits = args.traits
     directory = args.out_dir / "inputs"
@@ -97,7 +97,7 @@ def main():
         "VECLIB_MAXIMUM_THREADS",
     ):
         os.environ[name] = str(args.threads)
-    from fastmagma.io import parse_traits
+    from magma_py.io import parse_traits
 
     try:
         args.traits = parse_traits(args.traits)
@@ -132,7 +132,7 @@ def main():
         scenario, traits = f"shared_{count}", args.traits[:count]
         for repetition in range(1, args.repetitions + 1):
             record = results["records"].setdefault(scenario, {}).setdefault(str(repetition), {})
-            order = ["magma", "fastmagma"] if repetition % 2 else ["fastmagma", "magma"]
+            order = ["magma", "magma_py"] if repetition % 2 else ["magma_py", "magma"]
             if count == 8:
                 order.insert((repetition - 1) % 3, "fast_serial")
             for tool in order:
@@ -152,7 +152,7 @@ def main():
                 )
                 save(result_path, results)
             record["comparisons"] = {}
-            for tool in ("fastmagma", "fast_serial"):
+            for tool in ("magma_py", "fast_serial"):
                 if tool not in record:
                     continue
                 record["comparisons"][tool] = {}

@@ -107,7 +107,7 @@ def compare(args, directory, bfile, annot, pval):
         [
             sys.executable,
             "-m",
-            "fastmagma",
+            "magma_py",
             "run",
             "--chr",
             "22",
@@ -129,11 +129,11 @@ def compare(args, directory, bfile, annot, pval):
         directory / "fast.console.log",
     )
     official["rows"] = read_table(directory / "official.genes.out")
-    ours["rows"] = read_table(directory / "fast" / f"{pval.stem}.chr22.fastmagma.tsv")
+    ours["rows"] = read_table(directory / "fast" / f"{pval.stem}.chr22.magma_py.tsv")
     manifest = directory / "fast/chr22.manifest.json"
     if manifest.exists():
         ours["qc"] = json.loads(manifest.read_text())["qc"]
-    return dict(official=official, fastmagma=ours)
+    return dict(official=official, magma_py=ours)
 
 
 def synthetic(args):
@@ -345,7 +345,7 @@ def real_lowrank(args):
             eigenvalues=spectrum.tolist(),
             missing_counts=np.isnan(raw).sum(axis=0).tolist(),
         )
-        for label in ("official", "fastmagma"):
+        for label in ("official", "magma_py"):
             row = next((r for r in compared[label]["rows"] if r["GENE"] == gene), None)
             oracle[label] = row
             if row is not None:

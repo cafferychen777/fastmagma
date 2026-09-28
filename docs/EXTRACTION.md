@@ -15,5 +15,7 @@ binaries, archives, and manuals. The original MIT notice is preserved. Chen Yang
 is listed as maintainer; no new scientific authorship roster is inferred.
 
 Version 0.1.0 is the first local standalone package version, not evidence of a
-registry release. A repository URL must be added only after the actual standalone
-repository has been created. The release process is documented in RELEASING.md.
+registry release. The standalone repository is
+https://github.com/cafferychen777/magma-py. The project was renamed from fastmagma
+to MAGMA-py before its first registry release. The release process is documented
+in RELEASING.md.

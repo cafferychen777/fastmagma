@@ -14,7 +14,7 @@ import pandas as pd
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument(
-        "--genes-dir", required=True, help="dir with <trait>.genes.out (fastmagma merge output)"
+        "--genes-dir", required=True, help="dir with <trait>.genes.out (magma-py merge output)"
     )
     ap.add_argument(
         "--traits", required=True, help="comma-separated trait list, in desired column order"
@@ -27,7 +27,7 @@ def main():
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
 
-    from fastmagma.io import parse_traits, read_gene_table
+    from magma_py.io import parse_traits, read_gene_table
 
     traits = parse_traits(args.traits)
     gmap = pd.read_csv(args.map, sep="\t", dtype={"gene_loc_id": str}, keep_default_na=False)

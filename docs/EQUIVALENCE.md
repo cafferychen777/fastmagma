@@ -5,13 +5,13 @@ independent integrals distinguish statistical-model differences from numerical e
 
 ## Conclusion
 
-The large discrepancies in the original implementation are explained by a missing step in fastmagma's
+The large discrepancies in the original implementation are explained by a missing step in MAGMA-py's
 reproduction of **default MAGMA v1.10**: automatic within-gene SNP blocking,
 followed by combination of block P values. They are not evidence that MAGMA's
-matrix calculations are incorrect. fastmagma computes the whole-gene quadratic
+matrix calculations are incorrect. MAGMA-py computes the whole-gene quadratic
 form accurately in the examined cases, but that is a different statistical test.
 Independent angular integrals also resolve three remaining low-SNP discrepancies
-in favor of fastmagma's probabilities.
+in favor of MAGMA-py's probabilities.
 
 Sources were the [official v1.10 source distribution and binaries](https://cncr.nl/research/magma/),
 the manual, and controlled runs on the same reference panel, annotation and GWAS
@@ -34,9 +34,9 @@ size dependence of the discrepancies.
 Relevant v1.10 source locations are `parse.cpp:136–137`,
 `genemodelengine_compound.cpp:34–69,113–144`, and
 `engineutils.cpp:169–184`. These are pointers into the separately downloaded
-official source, not files distributed with fastmagma.
+official source, not files distributed with MAGMA-py.
 
-| Trait / gene | SNPs | fastmagma whole gene | MAGMA default | MAGMA blocking disabled |
+| Trait / gene | SNPs | MAGMA-py whole gene | MAGMA default | MAGMA blocking disabled |
 |---|---:|---:|---:|---:|
 | CAD / 56553 | 286 | 0.97625993 | 0.92434 | 0.97626 |
 | CAD / 55819 | 347 | 0.0457177444 | 0.063059 | 0.045718 |
@@ -61,7 +61,7 @@ blocking to an independent calculation.
 - All selected genotype calls were nonmissing. Official normalized genotype
   dumps match the reference columns up to allele orientation and text rounding;
   all matched-column absolute correlations exceeded 0.9999999999.
-- Whole-gene spectra derived from official dumps yield fastmagma's probabilities.
+- Whole-gene spectra derived from official dumps yield MAGMA-py's probabilities.
 - Independent direct weighted-chi-square simulations used 200,000 draws per case.
   They support the whole-gene calculation; they do not test MAGMA's blockwise null.
 - Independent Boost Imhof calculations on the same spectra agree for the large
@@ -98,7 +98,7 @@ The [validation record](VALIDATION.md#independent-resolution-of-small-gene-discr
 contains the three probabilities and official comparisons.
 
 For each case, Gauss-Legendre orders 64, 128, 256, and 512 agree with adaptive
-angular integration. The maximum absolute fastmagma error against that reference
+angular integration. The maximum absolute MAGMA-py error against that reference
 is approximately `2e-15`; official text rounding is too small to explain the
 differences shown. AD56632 has a numerical-null eigenvalue; retaining that tiny
 positive value in the independent integral gives the same result as removing it.
@@ -110,7 +110,7 @@ Float32 eigenvalues from the official genotype dump give `0.0003204601052`,
 excluding ordinary spectrum rounding as the explanation. MAGMA's acceptance
 check does not use the returned quadrature error estimate. This identifies a
 numerical limitation in the examined case, not a general claim about MAGMA's
-reliability. fastmagma keeps the independently supported probabilities rather
+reliability. MAGMA-py keeps the independently supported probabilities rather
 than reproducing these errors.
 
 The reusable oracle is [benchmarks/validate_boundaries.py](../benchmarks/validate_boundaries.py).
@@ -134,7 +134,7 @@ sets and `NSNPS`, `NPARAM`, and `N` matched throughout, including overlapping an
 disjoint missing calls at 25%, exclusion at 26%, and a 60-SNP two-block example
 whose corrected correlations exceed one. The largest absolute P difference was
 `4.58e-6`. Relative agreement is not claimed: some extreme synthetic probabilities
-expose an official numerical floor, whereas fastmagma retains log-space tails.
+expose an official numerical floor, whereas MAGMA-py retains log-space tails.
 See the [validation record](VALIDATION.md) for the complete test scope.
 
 ## Release interpretation

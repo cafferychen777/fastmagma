@@ -52,7 +52,7 @@ def main():
     summaries = {}
     for trait in args.traits.split(","):
         rows, summary = compare(
-            args.fast_dir / f"{trait}.chr22.fastmagma.tsv",
+            args.fast_dir / f"{trait}.chr22.magma_py.tsv",
             args.official_dir / trait / f"{trait}.batch22_chr.genes.out",
         )
         rows.to_csv(args.out_dir / f"{trait}.comparison.csv", index=False)

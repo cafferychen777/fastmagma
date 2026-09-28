@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Compare supplied fastmagma outputs with official MAGMA gene tables.
+"""Compare supplied MAGMA-py outputs with official MAGMA gene tables.
 
 This describes agreement; it does not establish calibration or declare a pass.
 """
@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import pearsonr, spearmanr
 
-from fastmagma.io import parse_chromosomes, parse_traits, read_gene_table
+from magma_py.io import parse_chromosomes, parse_traits, read_gene_table
 
 
 def compare(fast, magma, trait, chrom, threshold):
@@ -60,7 +60,7 @@ def main():
     rows = []
     for trait in parse_traits(args.traits):
         for chrom in parse_chromosomes(args.chrs):
-            fast = read_gene_table(args.fast_dir / f"{trait}.chr{chrom}.fastmagma.tsv")
+            fast = read_gene_table(args.fast_dir / f"{trait}.chr{chrom}.magma_py.tsv")
             path = args.magma_dir / trait / f"{trait}.batch{chrom}_chr.genes.out"
             magma = pd.read_csv(path, sep=r"\s+", comment="#", dtype={"GENE": str})
             rows.append(compare(fast, magma, trait, chrom, args.min_magma_p))

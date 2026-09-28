@@ -1,16 +1,22 @@
-# fastmagma
+# MAGMA-py
 
 <p align="center">
-  <img src="docs/assets/fastmagma-logo.png" alt="fastmagma logo" width="600">
+  <img src="docs/assets/magma-py-logo.png" alt="MAGMA-py logo" width="600">
 </p>
 
 **Gene-level association testing across multiple GWAS traits.**
 
 A Python implementation of the SNP-wise mean gene test used in
 [MAGMA](https://doi.org/10.1371/journal.pcbi.1004219), built for analyzing many
-traits against a shared LD reference. Give fastmagma GWAS P values, a PLINK
+traits against a shared LD reference. Give MAGMA-py GWAS P values, a PLINK
 reference panel, and SNP-to-gene annotations; it returns gene P values, Z scores,
 and a combined gene-by-trait matrix.
+
+MAGMA-py is an independent reimplementation, not an official MAGMA package or
+wrapper; it does not require the MAGMA executable. It was previously named
+**fastmagma**. The distribution and CLI are now `magma-py`, the Python module is
+`magma_py`, and per-chromosome outputs end in `.magma_py.tsv`. Existing fastmagma
+files are not automatically renamed; use a fresh output directory when switching.
 
 ## Highlights
 
@@ -37,7 +43,7 @@ python -m pip install .
 Analyze chromosome 22 for two traits:
 
 ```bash
-fastmagma run \
+magma-py run \
   --chr 22 \
   --bfile-prefix /data/reference. \
   --annot /data/genes.annot \
@@ -50,12 +56,12 @@ fastmagma run \
 Then combine the results into gene tables and a gene-by-trait Z-score matrix:
 
 ```bash
-fastmagma merge --traits cad,ad --chrs 22 --out-dir results
+magma-py merge --traits cad,ad --chrs 22 --out-dir results
 ```
 
 For a genome-wide analysis, run chromosomes 1–22 and merge with `--chrs 1-22`.
-See the [Slurm array example](examples/fastmagma_array.sbatch) for parallel jobs.
-`python -m fastmagma` also works; use `fastmagma --help` for available commands.
+See the [Slurm array example](examples/magma_py_array.sbatch) for parallel jobs.
+`python -m magma_py` also works; use `magma-py --help` for available commands.
 
 The package runs on CPU with NumPy, SciPy, pandas, bed-reader, and threadpoolctl.
 No MAGMA executable or EdgeMap installation is required. The first standalone
@@ -93,7 +99,7 @@ rs1    0.001   120000
 rs2    0.05    118500
 ```
 
-By default, fastmagma follows MAGMA v1.10's summary-statistic QC: accepted P
+By default, MAGMA-py follows MAGMA v1.10's summary-statistic QC: accepted P
 values are clipped to `[1e-50, 1-1e-5]`, SNP sample sizes are rounded and must
 exceed 50, and reference SNPs with more than 25% missing calls are excluded.
 Duplicate IDs are excluded according to input order; missing-call LD includes
@@ -106,7 +112,7 @@ are supplied by the user.
 
 | File | Contents |
 |---|---|
-| `<trait>.chr<chr>.fastmagma.tsv` | Per-chromosome gene results |
+| `<trait>.chr<chr>.magma_py.tsv` | Per-chromosome gene results |
 | `<trait>.genes.out` | Results merged across requested chromosomes |
 | `zstat_matrix.tsv` | Gene-by-trait Z scores |
 | `chr<chr>.manifest.json` | Input records, QC, methods, timing, resource settings, and output checksums |
@@ -139,7 +145,7 @@ independent chromosomes to run together.
 
 ## Performance and memory
 
-fastmagma avoids repeating the same LD work across traits. It also uses the
+MAGMA-py avoids repeating the same LD work across traits. It also uses the
 smaller of the sample-space and SNP-space Gram matrices for complete-data
 correlation spectra; missing-call correction uses the SNP-space matrix.
 
@@ -153,7 +159,7 @@ same allocation, single CAD improved from **5.11 to 4.76 seconds** and
 With one CPU/thread and three repetitions, paired **MAGMA v1.10** (`--genes-only`)
 still ran the single traits faster: **4.20 seconds** for CAD and **1.32 seconds**
 for AD, using about **24 and 16 MiB**. From the original full GWAS input files,
-the CAD/AD pair took **8.46 seconds** with fastmagma versus **11.37 seconds** with
+the CAD/AD pair took **8.46 seconds** with MAGMA-py versus **11.37 seconds** with
 MAGMA. This workload-specific advantage does not imply a general speedup.
 
 The statistical model and requested integration accuracy are unchanged. Checks
@@ -199,7 +205,7 @@ scratch when available.
 
 Temporary arrays are cleaned up on completion and handled errors. After an
 abrupt termination, verify that the process has stopped before removing stale
-`.fastmagma.*.lock` files or temporary directories.
+`.magma_py.*.lock` files or temporary directories.
 
 </details>
 
@@ -221,7 +227,7 @@ The default block model was compared with MAGMA v1.10 across chromosome 22:
 SNP counts and sample sizes matched for every gene, both top-20 sets matched,
 and no results crossed P=0.05 between implementations. The largest remaining
 AD difference is a two-SNP gene. Independent angular integration confirms
-fastmagma's probabilities for that gene and two additional low-SNP discrepancies.
+MAGMA-py's probabilities for that gene and two additional low-SNP discrepancies.
 
 The earlier large discrepancies came from MAGMA's default within-gene SNP
 blocking and block-P-value aggregation, absent from the original implementation.
@@ -229,7 +235,7 @@ The default `magma` model now includes that workflow; `whole` preserves the
 original calculation. See the [algorithm-equivalence investigation](docs/EQUIVALENCE.md)
 for controlled comparisons and a separately verified official integration error.
 
-fastmagma implements gene-level SNP-wise mean testing. It is an independent
+MAGMA-py implements gene-level SNP-wise mean testing. It is an independent
 implementation, with its own numerical integration and explicitly labeled
 saddlepoint/LTZ fallbacks. The default `NPARAM` follows the blockwise MAGMA
 formula, and input QC, sample-size rounding, and missing-call LD follow the
@@ -268,7 +274,7 @@ The source checkout includes utilities for
 
 The SNP-wise gene-analysis framework originates from
 [de Leeuw et al., *PLOS Computational Biology* (2015)](https://doi.org/10.1371/journal.pcbi.1004219).
-fastmagma was developed from the gene-analysis code in EdgeMap.
+MAGMA-py was developed from the gene-analysis code in EdgeMap.
 
 **Maintainer:** Chen Yang · `cafferychen777@tamu.edu`
 

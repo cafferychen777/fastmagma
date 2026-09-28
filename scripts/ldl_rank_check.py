@@ -7,14 +7,14 @@ Usage: python scripts/ldl_rank_check.py --genes-out ldl.genes.out --map genes.ts
 import argparse
 
 import pandas as pd
-from fastmagma.io import read_gene_table
+from magma_py.io import read_gene_table
 
 TARGET_SYMBOLS = ["LDLR", "APOB", "PCSK9", "HMGCR", "APOE", "SORT1"]
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--genes-out", required=True, help="fastmagma merged ldl.genes.out")
+    ap.add_argument("--genes-out", required=True, help="MAGMA-py merged ldl.genes.out")
     ap.add_argument("--map", required=True, help="gene_id_symbol_map.tsv")
     ap.add_argument("--top", type=int, default=30)
     args = ap.parse_args()

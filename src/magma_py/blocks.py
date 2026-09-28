@@ -2,7 +2,7 @@
 
 The block model follows an independent mathematical reconstruction: weighted
 chi-square tests within balanced contiguous blocks, followed by Brown's method
-using squared-LD estimates of dependence. Tail integration remains fastmagma's
+using squared-LD estimates of dependence. Tail integration remains magma_py's
 accurate implementation rather than reproducing reference integration errors.
 """
 

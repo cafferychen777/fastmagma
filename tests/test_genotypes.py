@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from bed_reader import open_bed, to_bed
 
-from fastmagma.genotypes import GenotypeReader, correlation_spectrum, normalize_genotypes
+from magma_py.genotypes import GenotypeReader, correlation_spectrum, normalize_genotypes
 
 
 def test_missing_data_correlation_matches_explicit_pearson():
@@ -77,7 +77,7 @@ def test_magma_missingness_qc_boundary_and_trait_selection(tmp_path):
 
 
 def test_magma_pairwise_ld_uses_individual_means_and_joint_count():
-    from fastmagma.genotypes import magma_correlation
+    from magma_py.genotypes import magma_correlation
 
     raw = np.array(
         [[0.0, 2.0, 1.0], [1.0, 0.0, 0.0], [2.0, 1.0, 2.0], [0.0, np.nan, 1.0], [np.nan, 2.0, 0.0]]

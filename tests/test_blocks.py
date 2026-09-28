@@ -6,9 +6,9 @@ import numpy as np
 import pytest
 from scipy.stats import chi2
 
-from fastmagma.blocks import prepare_gene
-from fastmagma.genotypes import normalize_genotypes
-from fastmagma.stats import effective_parameters, gene_test
+from magma_py.blocks import prepare_gene
+from magma_py.genotypes import normalize_genotypes
+from magma_py.stats import effective_parameters, gene_test
 
 
 def test_independent_blocks_reduce_to_fisher():
@@ -60,7 +60,7 @@ def test_balanced_block_boundary(n, k, sizes):
 
 def test_magma_truncates_boundary_eigenvalue_but_whole_retains_it(monkeypatch):
     monkeypatch.setattr(
-        "fastmagma.blocks.correlation_spectrum", lambda g: np.array([0.0001, 1.9999])
+        "magma_py.blocks.correlation_spectrum", lambda g: np.array([0.0001, 1.9999])
     )
     g = np.eye(6)[:, :2]
     assert prepare_gene(g).eigenvalues[0] == pytest.approx([1.9999])
@@ -69,7 +69,7 @@ def test_magma_truncates_boundary_eigenvalue_but_whole_retains_it(monkeypatch):
 
 def test_maximum_block_size_is_one_thousand(monkeypatch):
     # Avoid unnecessary eigendecomposition while exercising the actual partition.
-    monkeypatch.setattr("fastmagma.blocks.correlation_spectrum", lambda g: np.ones(g.shape[1]))
+    monkeypatch.setattr("magma_py.blocks.correlation_spectrum", lambda g: np.ones(g.shape[1]))
     g = np.zeros((2002, 1001))
     prepared = prepare_gene(g)
     assert prepared.block_sizes == (501, 500)
@@ -140,7 +140,7 @@ def test_invalid_preparation_fails(g, model):
 
 
 def test_missing_ld_discards_negative_eigenvalues_without_psd_projection():
-    from fastmagma.genotypes import magma_correlation
+    from magma_py.genotypes import magma_correlation
 
     rng = np.random.default_rng(343)
     raw = np.tile(rng.integers(0, 3, 40), (3, 1)).T.astype(float)

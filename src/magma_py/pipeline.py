@@ -36,8 +36,8 @@ def locked_outputs(directory, chromosomes, merging=False):
     """Lock affected chromosomes; independent chromosome jobs can run together."""
     out = Path(directory)
     out.mkdir(parents=True, exist_ok=True)
-    names = [".fastmagma.merge.lock"] if merging else []
-    names += [f".fastmagma.chr{c}.lock" for c in sorted(chromosomes)]
+    names = [".magma_py.merge.lock"] if merging else []
+    names += [f".magma_py.chr{c}.lock" for c in sorted(chromosomes)]
     acquired = []
     try:
         for name in names:
@@ -96,7 +96,7 @@ def run_chromosome(args):
     chrom = parse_chromosomes(str(args.chr))[0]
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    names = [f"{t}.chr{chrom}.fastmagma.tsv" for t in traits]
+    names = [f"{t}.chr{chrom}.magma_py.tsv" for t in traits]
     manifest_name = f"chr{chrom}.manifest.json"
     _check_outputs([out / name for name in [*names, manifest_name]], args.overwrite)
     bfile = f"{args.bfile_prefix}{chrom}"
@@ -138,7 +138,7 @@ def run_chromosome(args):
     methods = {t: Counter() for t in traits}
     max_estimate = 0
     eigen_count = 0
-    with tempfile.TemporaryDirectory(prefix="fastmagma-", dir=args.temp_dir) as scratch:
+    with tempfile.TemporaryDirectory(prefix="magma_py-", dir=args.temp_dir) as scratch:
         # One reference-order index serves both input validation and genotype reads.
         store = TraitStore(scratch, traits, snps, model=model)
         try:
@@ -149,7 +149,7 @@ def run_chromosome(args):
             available = np.zeros(len(snps), dtype=bool)
             for t in range(len(traits)):
                 available |= np.isfinite(store.values[t, 0])
-            with tempfile.TemporaryDirectory(prefix=".fastmagma-", dir=out) as stage:
+            with tempfile.TemporaryDirectory(prefix=".magma_py-", dir=out) as stage:
                 staging = Path(stage)
                 with ExitStack() as stack, threadpool_limits(limits=args.threads):
                     writers = []
@@ -234,7 +234,7 @@ def run_chromosome(args):
                     )
                 metadata = dict(
                     schema=1,
-                    version=version("fastmagma"),
+                    version=version("magma-py"),
                     chromosome=chrom,
                     model=model,
                     model_revision=2 if model == "magma" else 1,
@@ -275,10 +275,10 @@ def merge_chromosomes(args):
     marker = "merge.manifest.json"
     _check_outputs([out / name for name in [*names, marker]], args.overwrite)
     missing = [
-        f"{t}.chr{c}.fastmagma.tsv"
+        f"{t}.chr{c}.magma_py.tsv"
         for t in traits
         for c in chromosomes
-        if not (out / f"{t}.chr{c}.fastmagma.tsv").is_file()
+        if not (out / f"{t}.chr{c}.magma_py.tsv").is_file()
     ]
     if missing and not args.allow_missing:
         raise FileNotFoundError(f"Missing chromosome outputs: {', '.join(missing)}")
@@ -286,12 +286,12 @@ def merge_chromosomes(args):
         LOG.warning("Explicitly allowing missing chromosome files: %s", missing)
     zmat = {}
     source_models = set()
-    with tempfile.TemporaryDirectory(prefix=".fastmagma-merge-", dir=out) as stage:
+    with tempfile.TemporaryDirectory(prefix=".magma_py-merge-", dir=out) as stage:
         staging = Path(stage)
         for trait in traits:
             parts = []
             for chrom in chromosomes:
-                path = out / f"{trait}.chr{chrom}.fastmagma.tsv"
+                path = out / f"{trait}.chr{chrom}.magma_py.tsv"
                 if not path.exists():
                     continue
                 source_marker = out / f"chr{chrom}.manifest.json"
@@ -332,7 +332,7 @@ def merge_chromosomes(args):
             marker,
             dict(
                 schema=1,
-                version=version("fastmagma"),
+                version=version("magma-py"),
                 traits=traits,
                 chromosomes=chromosomes,
                 model=model,

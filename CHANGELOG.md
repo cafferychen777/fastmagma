@@ -2,6 +2,10 @@
 
 ## 0.1.0 — unreleased
 
+- Rename the project to MAGMA-py: distribution and CLI `magma-py`, Python
+  module `magma_py`, and output suffix `.magma_py.tsv`. Update repository URLs
+  and branding without changing the statistical algorithms. Existing output
+  files retain their original names; use a fresh output directory after migration.
 - Move quadrature callbacks to portable C extensions while retaining the same
   integration formulas, tolerances, diagnostics, and fallback rules.
 - Share a bounded exact-node cache between sine and cosine quadrature callbacks,

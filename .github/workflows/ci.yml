@@ -27,11 +27,11 @@ jobs:
         shell: bash
         run: |
           python -m pip install --force-reinstall --no-deps dist/*.whl
-          cp -R tests "$RUNNER_TEMP/fastmagma-tests"
+          cp -R tests "$RUNNER_TEMP/magma_py-tests"
           cp -R scripts "$RUNNER_TEMP/scripts"
           cd "$RUNNER_TEMP"
-          python -m pytest fastmagma-tests --import-mode=importlib
-          python -m fastmagma --version
+          python -m pytest magma_py-tests --import-mode=importlib
+          python -m magma_py --version
   minimum-dependencies:
     runs-on: ubuntu-latest
     steps:

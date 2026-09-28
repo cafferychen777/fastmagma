@@ -19,7 +19,7 @@ from threadpoolctl import threadpool_limits
 
 
 def worker(variant):
-    from fastmagma.genotypes import correlation_spectrum, normalize_genotypes
+    from magma_py.genotypes import correlation_spectrum, normalize_genotypes
 
     rng = np.random.default_rng(981)
     g, keep = normalize_genotypes(rng.integers(0, 3, size=(150, 1500)))

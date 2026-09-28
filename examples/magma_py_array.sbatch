@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH --job-name=fastmagma
+#SBATCH --job-name=magma-py
 #SBATCH --time=5:00:00
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=24G
 #SBATCH --array=1-22
-#SBATCH --output=fastmagma_%A_%a.log
-# Activate an environment containing fastmagma before submitting this job.
+#SBATCH --output=magma_py_%A_%a.log
+# Activate an environment containing MAGMA-py before submitting this job.
 # Export BFILE_PREFIX, ANNOT, PVAL_DIR, TRAITS, and OUT_DIR before sbatch.
 set -euo pipefail
 : "${BFILE_PREFIX:?Set BFILE_PREFIX to the PLINK prefix before chromosome number}"
@@ -17,6 +17,6 @@ export PYTHONUNBUFFERED=1
 export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-4}"
 export MKL_NUM_THREADS="$OMP_NUM_THREADS"
 export OPENBLAS_NUM_THREADS="$OMP_NUM_THREADS"
-fastmagma run --chr "$SLURM_ARRAY_TASK_ID" \
+magma-py run --chr "$SLURM_ARRAY_TASK_ID" \
   --bfile-prefix "$BFILE_PREFIX" --annot "$ANNOT" \
   --pval-dir "$PVAL_DIR" --traits "$TRAITS" --out-dir "$OUT_DIR" --threads "${SLURM_CPUS_PER_TASK:-4}"

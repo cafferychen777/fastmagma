@@ -31,12 +31,14 @@ htmlcov/
 *.pval.gz
 *.genes.annot
 *.genes.out
+*.magma_py.tsv
 *.fastmagma.tsv
 zstat_matrix.tsv
 gene_z_matrix.tsv
 validation_summary.csv
 chr*.manifest.json
 merge.manifest.json
+.magma_py.*
 .fastmagma.*
 *.log
 slurm-*.out

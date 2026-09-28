@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from fastmagma.cli import main
+from magma_py.cli import main
 
 
 @pytest.fixture
@@ -53,9 +53,9 @@ def inputs(tmp_path):
 def test_cli_run_merge_and_reuse(inputs):
     p, args = inputs
     # A subprocess outside the checkout exercises the installed module.
-    subprocess.run([sys.executable, "-m", "fastmagma", *args], cwd=p, check=True)
-    a = pd.read_csv(p / "out/a.chr22.fastmagma.tsv", sep="\t", dtype={"GENE": str})
-    b = pd.read_csv(p / "out/b.chr22.fastmagma.tsv", sep="\t", dtype={"GENE": str})
+    subprocess.run([sys.executable, "-m", "magma_py", *args], cwd=p, check=True)
+    a = pd.read_csv(p / "out/a.chr22.magma_py.tsv", sep="\t", dtype={"GENE": str})
+    b = pd.read_csv(p / "out/b.chr22.magma_py.tsv", sep="\t", dtype={"GENE": str})
     pd.testing.assert_frame_equal(a, b)
     assert a.GENE.tolist() == ["001", "G2", "G3"]
     assert a.P.iloc[0] == pytest.approx(0.01)
@@ -76,10 +76,10 @@ def test_trait_missingness_and_uncached_equivalence(inputs):
     p, args = inputs
     (p / "b.pval").write_text("SNP P N\nrs0 .01 1000\nrs2 .03 1000\n")
     assert main(args) == 0
-    expected = (p / "out/b.chr22.fastmagma.tsv").read_bytes()
+    expected = (p / "out/b.chr22.magma_py.tsv").read_bytes()
     assert main(args + ["--overwrite", "--cache-mb", "0", "--block-snps", "2"]) == 0
-    assert expected == (p / "out/b.chr22.fastmagma.tsv").read_bytes()
-    b = pd.read_csv(p / "out/b.chr22.fastmagma.tsv", sep="\t")
+    assert expected == (p / "out/b.chr22.magma_py.tsv").read_bytes()
+    b = pd.read_csv(p / "out/b.chr22.magma_py.tsv", sep="\t")
     assert b.NSNPS.tolist() == [1, 2, 1]
 
 
@@ -88,13 +88,13 @@ def test_resource_failure_does_not_publish(inputs):
     assert main(args + ["--max-gene-snps", "1"]) == 1
     assert not list((p / "out").glob("*.tsv"))
     assert not list((p / "out").glob("*.json"))
-    assert not list((p / "out").glob(".fastmagma-*"))
+    assert not list((p / "out").glob(".magma_py-*"))
 
 
 def test_merge_rejects_wrong_chromosome(inputs):
     p, args = inputs
     assert main(args) == 0
-    path = p / "out/a.chr22.fastmagma.tsv"
+    path = p / "out/a.chr22.magma_py.tsv"
     df = pd.read_csv(path, sep="\t")
     df["CHR"] = 21
     df.to_csv(path, sep="\t", index=False)
@@ -102,7 +102,7 @@ def test_merge_rejects_wrong_chromosome(inputs):
 
 
 def test_version_and_help_without_numpy(tmp_path):
-    code = "import sys; from fastmagma.cli import main\ntry: main(['--help'])\nexcept SystemExit: pass\nassert 'numpy' not in sys.modules"
+    code = "import sys; from magma_py.cli import main\ntry: main(['--help'])\nexcept SystemExit: pass\nassert 'numpy' not in sys.modules"
     subprocess.run([sys.executable, "-c", code], cwd=tmp_path, check=True, capture_output=True)
 
 
@@ -110,12 +110,12 @@ def test_lock_and_manifest_integrity(inputs):
     p, args = inputs
     out = p / "out"
     out.mkdir()
-    (out / ".fastmagma.chr22.lock").write_text("active process")
+    (out / ".magma_py.chr22.lock").write_text("active process")
     assert main(args) == 1
-    assert (out / ".fastmagma.chr22.lock").read_text() == "active process"
-    (out / ".fastmagma.chr22.lock").unlink()
+    assert (out / ".magma_py.chr22.lock").read_text() == "active process"
+    (out / ".magma_py.chr22.lock").unlink()
     assert main(args) == 0
-    assert not (out / ".fastmagma.chr22.lock").exists()
+    assert not (out / ".magma_py.chr22.lock").exists()
     (out / "chr22.manifest.json").unlink()
     assert main(["merge", "--traits", "a", "--out-dir", str(out), "--chrs", "22"]) == 1
 
@@ -123,10 +123,10 @@ def test_lock_and_manifest_integrity(inputs):
 def test_workspace_failure_and_preserve_prior_output(inputs):
     p, args = inputs
     assert main(args) == 0
-    original = (p / "out/a.chr22.fastmagma.tsv").read_bytes()
+    original = (p / "out/a.chr22.magma_py.tsv").read_bytes()
     assert main(args + ["--overwrite", "--workspace-mb", "1", "--block-snps", "100000"]) == 1
-    assert (p / "out/a.chr22.fastmagma.tsv").read_bytes() == original
-    assert not (p / "out/.fastmagma.chr22.lock").exists()
+    assert (p / "out/a.chr22.magma_py.tsv").read_bytes() == original
+    assert not (p / "out/.magma_py.chr22.lock").exists()
 
 
 def test_whole_model_preserves_p_one(inputs):
@@ -145,7 +145,7 @@ def test_magma_input_clipping_and_integer_mean_n(inputs):
     for trait in ["a", "b"]:
         (p / f"{trait}.pval").write_text("SNP P N\nrs0 1 50.5\nrs1 .1 51.5\nrs2 .2 53\n")
     assert main(args) == 0
-    a = pd.read_csv(p / "out/a.chr22.fastmagma.tsv", sep="\t", dtype={"GENE": str})
+    a = pd.read_csv(p / "out/a.chr22.magma_py.tsv", sep="\t", dtype={"GENE": str})
     a = a.set_index("GENE")
     assert a.loc["001", "P"] == pytest.approx(1 - 1e-5)
     assert a.loc["001", "N"] == 51
@@ -153,17 +153,17 @@ def test_magma_input_clipping_and_integer_mean_n(inputs):
 
 
 def test_independent_chromosome_locks_and_merge_exclusion(tmp_path):
-    from fastmagma.pipeline import locked_outputs
+    from magma_py.pipeline import locked_outputs
 
     with locked_outputs(tmp_path, [22]):
         with locked_outputs(tmp_path, [21]):
-            assert (tmp_path / ".fastmagma.chr21.lock").exists()
+            assert (tmp_path / ".magma_py.chr21.lock").exists()
         with pytest.raises(RuntimeError, match="locked"):
             with locked_outputs(tmp_path, [21, 22], merging=True):
                 pytest.fail("Merge acquired a locked chromosome")
-        assert not (tmp_path / ".fastmagma.merge.lock").exists()
-        assert not (tmp_path / ".fastmagma.chr21.lock").exists()
-        assert (tmp_path / ".fastmagma.chr22.lock").exists()
+        assert not (tmp_path / ".magma_py.merge.lock").exists()
+        assert not (tmp_path / ".magma_py.chr21.lock").exists()
+        assert (tmp_path / ".magma_py.chr22.lock").exists()
     assert not list(tmp_path.glob("*.lock"))
 
 
@@ -199,8 +199,8 @@ def test_large_gene_model_selection_and_io_independence(tmp_path):
     ]
     assert main(args) == 0
     out = tmp_path / "out"
-    default = (out / "a.chr22.fastmagma.tsv").read_bytes()
-    assert default == (out / "b.chr22.fastmagma.tsv").read_bytes()
+    default = (out / "a.chr22.magma_py.tsv").read_bytes()
+    assert default == (out / "b.chr22.magma_py.tsv").read_bytes()
     metadata = json.loads((out / "chr22.manifest.json").read_text())
     assert metadata["model"] == "magma"
     # Three shared statistical blocks, not six separate trait computations.
@@ -209,15 +209,15 @@ def test_large_gene_model_selection_and_io_independence(tmp_path):
         main(args + ["--overwrite", "--model", "magma", "--block-snps", "7", "--cache-mb", "0"])
         == 0
     )
-    assert default == (out / "a.chr22.fastmagma.tsv").read_bytes()
+    assert default == (out / "a.chr22.magma_py.tsv").read_bytes()
     assert main(args + ["--overwrite", "--model", "whole"]) == 0
     metadata = json.loads((out / "chr22.manifest.json").read_text())
     assert metadata["model"] == "whole"
     assert metadata["resources"]["eigendecompositions"] == 1
-    whole = pd.read_csv(out / "a.chr22.fastmagma.tsv", sep="\t")
-    assert (out / "a.chr22.fastmagma.tsv").read_bytes() != default
-    from fastmagma.genotypes import correlation_spectrum, normalize_genotypes
-    from fastmagma.stats import gene_test
+    whole = pd.read_csv(out / "a.chr22.magma_py.tsv", sep="\t")
+    assert (out / "a.chr22.magma_py.tsv").read_bytes() != default
+    from magma_py.genotypes import correlation_spectrum, normalize_genotypes
+    from magma_py.stats import gene_test
     from scipy.special import ndtri
 
     p = np.array([0.1 + i / 100 for i in range(len(snps))])
@@ -233,10 +233,10 @@ def test_merge_rejects_mixed_models_and_legacy_outputs(inputs, second_model):
     p, args = inputs
     assert main(args) == 0
     out = p / "out"
-    source = pd.read_csv(out / "a.chr22.fastmagma.tsv", sep="\t", dtype={"GENE": str})
+    source = pd.read_csv(out / "a.chr22.magma_py.tsv", sep="\t", dtype={"GENE": str})
     source["CHR"] = 21
     source["GENE"] = "chr21_" + source.GENE
-    second = out / "a.chr21.fastmagma.tsv"
+    second = out / "a.chr21.magma_py.tsv"
     source.to_csv(second, sep="\t", index=False)
     metadata = {
         "outputs": {second.name: {"sha256": hashlib.sha256(second.read_bytes()).hexdigest()}}
@@ -262,7 +262,7 @@ def test_merge_rejects_mixed_models_and_legacy_outputs(inputs, second_model):
 def test_reference_order_deduplicates_annotation_and_ignores_unneeded_metadata(inputs):
     p, args = inputs
     assert main(args) == 0
-    expected = (p / "out/a.chr22.fastmagma.tsv").read_bytes()
+    expected = (p / "out/a.chr22.magma_py.tsv").read_bytes()
     # Unused PLINK metadata need not be parsed into numerical arrays.
     for name, columns in [("ref.22.bim", [2, 3]), ("ref.22.fam", [4])]:
         path = p / name
@@ -278,7 +278,7 @@ def test_reference_order_deduplicates_annotation_and_ignores_unneeded_metadata(i
         annotation.read_text().replace("rs0\trs1\trs2", "rs2\tmissing\trs0\trs1\trs2")
     )
     assert main(args + ["--overwrite"]) == 0
-    assert (p / "out/a.chr22.fastmagma.tsv").read_bytes() == expected
+    assert (p / "out/a.chr22.magma_py.tsv").read_bytes() == expected
 
 
 @pytest.mark.parametrize("late_line", ["malformed\n", "001\t22:10:12\trs1\n"])
@@ -292,7 +292,7 @@ def test_late_annotation_failure_preserves_published_outputs(inputs, late_line):
     assert main(args + ["--overwrite"]) == 1
     after = {path.name: path.read_bytes() for path in output.iterdir() if path.is_file()}
     assert before == after
-    assert not list(output.glob(".fastmagma-*"))
+    assert not list(output.glob(".magma_py-*"))
 
 
 @pytest.mark.parametrize(
@@ -309,4 +309,4 @@ def test_streamed_annotation_empty_or_absent_reference(inputs, annotation, error
     assert error in capsys.readouterr().err
     assert not list((root / "out").glob("*.tsv"))
     assert not list((root / "out").glob("*.manifest.json"))
-    assert not list((root / "out").glob(".fastmagma-*"))
+    assert not list((root / "out").glob(".magma_py-*"))

@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from fastmagma.io import TraitStore, load_annotation, parse_chromosomes, parse_traits
+from magma_py.io import TraitStore, load_annotation, parse_chromosomes, parse_traits
 
 
 def test_qc_duplicates_across_chunks_and_invalid_rows(tmp_path):
@@ -121,7 +121,7 @@ def test_magma_invalid_first_row_is_an_error(tmp_path, p, n, error):
 @pytest.mark.parametrize("chunk_rows", [1, 2, 100])
 @pytest.mark.parametrize("model", ["whole", "magma"])
 def test_reference_filter_preserves_qc(tmp_path, monkeypatch, chunk_rows, model):
-    import fastmagma.io as io
+    import magma_py.io as io
 
     (tmp_path / "a.pval").write_text(
         "EXTRA N SNP P\n"
@@ -156,7 +156,7 @@ def test_reference_filter_preserves_qc(tmp_path, monkeypatch, chunk_rows, model)
     ],
 )
 def test_reference_filter_delegates_general_tables(tmp_path, content):
-    from fastmagma._input import filter_pval
+    from magma_py._input import filter_pval
 
     source, destination = tmp_path / "input", tmp_path / "output"
     source.write_text(content, encoding="utf-8")
@@ -164,7 +164,7 @@ def test_reference_filter_delegates_general_tables(tmp_path, content):
 
 
 def test_reference_filter_handles_line_boundaries(tmp_path):
-    from fastmagma._input import filter_pval
+    from magma_py._input import filter_pval
 
     source, destination = tmp_path / "input", tmp_path / "output"
     long_id = "x" * 140000
@@ -174,7 +174,7 @@ def test_reference_filter_handles_line_boundaries(tmp_path):
 
 
 def test_reference_filter_unicode_paths_and_error_cleanup(tmp_path):
-    from fastmagma._input import filter_pval
+    from magma_py._input import filter_pval
 
     directory = tmp_path / "统计"
     directory.mkdir()
@@ -192,7 +192,7 @@ def test_reference_filter_unicode_paths_and_error_cleanup(tmp_path):
 
 @pytest.mark.parametrize("separator", ["\v", "\f"])
 def test_reference_filter_preserves_unusual_whitespace_qc(tmp_path, monkeypatch, separator):
-    import fastmagma.io as io
+    import magma_py.io as io
 
     (tmp_path / "a.pval").write_text(f"SNP P N\n{separator}\nr1 .2 100\n")
     store = TraitStore(tmp_path, ["a"], ["r1"])
@@ -237,7 +237,7 @@ def test_reference_filter_preserves_unusual_whitespace_qc(tmp_path, monkeypatch,
 )
 def test_numeric_parser_matches_decimal_acceptance(text):
     import pandas as pd
-    from fastmagma.io import _numeric
+    from magma_py.io import _numeric
 
     expected = pd.to_numeric(pd.Series([text]), errors="coerce").to_numpy(dtype=float)
     actual = _numeric(np.asarray([text], dtype=object))
@@ -268,7 +268,7 @@ def test_plain_trait_loading_does_not_import_pandas(tmp_path):
         [
             sys.executable,
             "-c",
-            "import sys; from fastmagma.io import TraitStore; "
+            "import sys; from magma_py.io import TraitStore; "
             "store = TraitStore(sys.argv[1], ['a'], ['r1']); "
             "store.load(sys.argv[1], 100); store.close(); "
             "assert 'pandas' not in sys.modules",
@@ -281,7 +281,7 @@ def test_plain_trait_loading_does_not_import_pandas(tmp_path):
 
 
 def test_snp_index_reuses_single_lookup(tmp_path):
-    from fastmagma.io import SnpIndex
+    from magma_py.io import SnpIndex
 
     index = SnpIndex(["r2", "r1"])
     np.testing.assert_array_equal(index.get_indexer(["r1", "missing", "r2"]), [1, -1, 0])
@@ -302,7 +302,7 @@ def test_snp_index_reuses_single_lookup(tmp_path):
     ],
 )
 def test_streamed_reference_index_rejects_invalid_metadata(tmp_path, content, error):
-    from fastmagma.io import load_reference_index
+    from magma_py.io import load_reference_index
 
     path = tmp_path / "reference.bim"
     path.write_text(content)
@@ -311,7 +311,7 @@ def test_streamed_reference_index_rejects_invalid_metadata(tmp_path, content, er
 
 
 def test_streamed_reference_index_preserves_order_and_ignores_unused_fields(tmp_path):
-    from fastmagma.io import load_reference_index
+    from magma_py.io import load_reference_index
 
     path = tmp_path / "reference.bim"
     path.write_text("# comment\n\n22\tr2\tbad\tbad\tA\tC\n22\tr1\t0\t1\tA\tC # comment\n")
@@ -367,7 +367,7 @@ def test_magma_negative_halfway_rounds_away_from_zero(tmp_path, value):
 
 def test_native_numeric_matches_previous_float_conversion():
     import re
-    from fastmagma.io import _numeric
+    from magma_py.io import _numeric
 
     pattern = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?\Z")
     tokens = [
@@ -423,14 +423,14 @@ def test_native_numeric_matches_previous_float_conversion():
     ],
 )
 def test_native_numeric_rejects_invalid_output_buffers(output):
-    from fastmagma._input import parse_numeric
+    from magma_py._input import parse_numeric
 
     with pytest.raises(ValueError):
         parse_numeric([".1", ".2"], output)
 
 
 def test_native_numeric_rejects_readonly_and_nonstring_inputs():
-    from fastmagma._input import parse_numeric
+    from magma_py._input import parse_numeric
 
     output = np.empty(1)
     output.flags.writeable = False
@@ -442,7 +442,7 @@ def test_native_numeric_rejects_readonly_and_nonstring_inputs():
 
 
 def test_reference_filter_accepts_mapping_keys_without_changing_rows(tmp_path):
-    from fastmagma._input import filter_pval
+    from magma_py._input import filter_pval
 
     source = tmp_path / "input"
     source.write_text("SNP P N\nr2 .2 100\noutside .3 100\nr1 .1 100\nr1 NA bad\n")
@@ -455,7 +455,7 @@ def test_reference_filter_accepts_mapping_keys_without_changing_rows(tmp_path):
 
 
 def test_native_numeric_handles_unaligned_buffers_and_surrogates():
-    from fastmagma._input import parse_numeric
+    from magma_py._input import parse_numeric
 
     backing = bytearray(17)
     output = np.ndarray((2,), dtype=np.float64, buffer=backing, offset=1)
@@ -466,7 +466,7 @@ def test_native_numeric_handles_unaligned_buffers_and_surrogates():
 
 
 def test_annotation_iterator_matches_materialized_order(tmp_path):
-    from fastmagma.io import iter_annotation
+    from magma_py.io import iter_annotation
 
     path = tmp_path / "genes.annot"
     path.write_text("# comment\nG0\t1:1:2\trs0\nG2\t22:1:3\trs2\trs1\trs2\nG1\t22:2:4\trs1\n")
@@ -475,7 +475,7 @@ def test_annotation_iterator_matches_materialized_order(tmp_path):
 
 
 def test_annotation_iterator_validates_late_rows_on_consumption(tmp_path):
-    from fastmagma.io import iter_annotation
+    from magma_py.io import iter_annotation
 
     path = tmp_path / "genes.annot"
     path.write_text("G1\t22:1:3\trs1\nmalformed\n")
