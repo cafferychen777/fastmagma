@@ -441,7 +441,7 @@ def test_native_numeric_rejects_readonly_and_nonstring_inputs():
     parse_numeric([], np.empty(0))
 
 
-def test_reference_filter_reuses_mapping_without_changing_rows(tmp_path):
+def test_reference_filter_accepts_mapping_keys_without_changing_rows(tmp_path):
     from fastmagma._input import filter_pval
 
     source = tmp_path / "input"
@@ -463,3 +463,23 @@ def test_native_numeric_handles_unaligned_buffers_and_surrogates():
     parse_numeric([".2", "\ud800"], output)
     assert output[0] == 0.2
     assert np.isnan(output[1])
+
+
+def test_annotation_iterator_matches_materialized_order(tmp_path):
+    from fastmagma.io import iter_annotation
+
+    path = tmp_path / "genes.annot"
+    path.write_text("# comment\nG0\t1:1:2\trs0\nG2\t22:1:3\trs2\trs1\trs2\nG1\t22:2:4\trs1\n")
+    assert list(iter_annotation(path, 22)) == load_annotation(path, 22)
+    assert [gene.identifier for gene in iter_annotation(path, 22)] == ["G2", "G1"]
+
+
+def test_annotation_iterator_validates_late_rows_on_consumption(tmp_path):
+    from fastmagma.io import iter_annotation
+
+    path = tmp_path / "genes.annot"
+    path.write_text("G1\t22:1:3\trs1\nmalformed\n")
+    genes = iter_annotation(path, 22)
+    assert next(genes).identifier == "G1"
+    with pytest.raises(ValueError, match="Malformed annotation"):
+        next(genes)

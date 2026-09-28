@@ -73,23 +73,18 @@ static PyObject *filter_pval(PyObject *self, PyObject *args) {
     if (!PyArg_ParseTuple(args, "OOO:filter_pval", &source_obj, &snps, &destination_obj)) return NULL;
     if (!PyUnicode_FSConverter(source_obj, &source) ||
         !PyUnicode_FSConverter(destination_obj, &destination)) goto cleanup;
-    int shared_index = PyDict_Check(snps);
-    if (shared_index) {
-        identifiers = Py_NewRef(snps);
-    } else {
-        identifiers = PySet_New(NULL);
-        iterator = PyObject_GetIter(snps);
-        if (!identifiers || !iterator) goto cleanup;
-        while ((item = PyIter_Next(iterator))) {
-            PyObject *encoded = PyUnicode_AsUTF8String(item);
-            Py_CLEAR(item);
-            if (!encoded) goto cleanup;
-            int added = PySet_Add(identifiers, encoded);
-            Py_DECREF(encoded);
-            if (added < 0) goto cleanup;
-        }
-        if (PyErr_Occurred()) goto cleanup;
+    identifiers = PySet_New(NULL);
+    iterator = PyObject_GetIter(snps);
+    if (!identifiers || !iterator) goto cleanup;
+    while ((item = PyIter_Next(iterator))) {
+        PyObject *encoded = PyUnicode_AsUTF8String(item);
+        Py_CLEAR(item);
+        if (!encoded) goto cleanup;
+        int added = PySet_Add(identifiers, encoded);
+        Py_DECREF(encoded);
+        if (added < 0) goto cleanup;
     }
+    if (PyErr_Occurred()) goto cleanup;
     input = open_path(source, "rb");
     if (!input) {
         if (!PyErr_Occurred()) PyErr_SetFromErrnoWithFilenameObject(PyExc_OSError, source_obj);
@@ -137,11 +132,9 @@ static PyObject *filter_pval(PyObject *self, PyObject *args) {
             if (fields != header_fields || !snp) goto fallback;
             rows++;
             if ((rows & 65535) == 0 && PyErr_CheckSignals() < 0) goto cleanup;
-            PyObject *key = shared_index
-                ? PyUnicode_DecodeASCII(snp, (Py_ssize_t)snp_length, NULL)
-                : PyBytes_FromStringAndSize(snp, (Py_ssize_t)snp_length);
+            PyObject *key = PyBytes_FromStringAndSize(snp, (Py_ssize_t)snp_length);
             if (!key) goto cleanup;
-            int present = shared_index ? PyDict_Contains(identifiers, key) : PySet_Contains(identifiers, key);
+            int present = PySet_Contains(identifiers, key);
             Py_DECREF(key);
             if (present < 0) goto cleanup;
             if (!present) continue;

@@ -5,15 +5,21 @@
 - Move quadrature callbacks to portable C extensions while retaining the same
   integration formulas, tolerances, diagnostics, and fallback rules.
 - Share a bounded exact-node cache between sine and cosine quadrature callbacks,
-  avoiding repeated spectrum calculations without interpolation. Retry original
+  with up to eight collision probes and no interpolation. Retry original
   callbacks at identical tolerances if cached quadrature fails its error check.
 - Filter plain GWAS inputs by reference SNP in a native streaming pass before
   constructing numeric-column strings; retain the general parser for unusual
-  tables and preserve ordered input QC.
+  tables and preserve ordered input QC. Convert decimal strings through
+  CPython's native parser.
 - Stream BIM metadata into one reference SNP lookup shared by annotation and
   trait input; load pandas only for general table syntax or output merging.
+- Stream gene annotations during analysis and initialize numerical integration
+  after input loading, reducing overlapping buffer and metadata lifetimes.
 - Normalize newly owned genotype buffers in place, omit missing-call masks for
-  complete blocks, and avoid copies when every selected SNP passes QC.
+  complete blocks, and avoid copies when every selected SNP passes QC. Select
+  single-block genes directly into independent result arrays.
+- Form only the lower Gram triangle with BLAS SYRK and call the same LAPACK
+  symmetric eigensolver directly, caching workspace sizes for up to 256 distinct matrix dimensions.
 - Reduce default parsing chunks to 32,768 rows and genotype cache to 8 MiB.
 - Convert decimal input strings directly to float64, preserving the investigated
   MAGMA binary's sample-size rounding behavior at adjacent half-boundary values.

@@ -61,8 +61,9 @@ class Gene:
     snps: tuple[str, ...]
 
 
-def load_annotation(path, chrom):
-    genes, seen = [], set()
+def iter_annotation(path, chrom):
+    """Yield validated chromosome genes without retaining their SNP strings."""
+    seen = set()
     with open(path) as stream:
         for number, line in enumerate(stream, 1):
             if not line.strip() or line.startswith("#"):
@@ -80,10 +81,14 @@ def load_annotation(path, chrom):
             if gene in seen:
                 raise ValueError(f"Duplicate gene ID {gene!r} on chromosome {chrom}")
             seen.add(gene)
-            genes.append(Gene(gene, c, start, stop, tuple(dict.fromkeys(snps))))
-    if not genes:
+            yield Gene(gene, c, start, stop, tuple(dict.fromkeys(snps)))
+    if not seen:
         raise ValueError(f"No genes annotated on chromosome {chrom}")
-    return genes
+
+
+def load_annotation(path, chrom):
+    """Return all chromosome genes for callers that need a materialized list."""
+    return list(iter_annotation(path, chrom))
 
 
 @contextmanager
@@ -92,7 +97,7 @@ def _reference_rows(path, snps, directory):
     with NamedTemporaryFile(dir=directory, suffix=".pval", delete=False) as stream:
         filtered = Path(stream.name)
     try:
-        rows = filter_pval(path, snps.positions, filtered)
+        rows = filter_pval(path, snps, filtered)
         yield (path, None) if rows is None else (filtered, rows)
     finally:
         filtered.unlink(missing_ok=True)

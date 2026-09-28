@@ -147,23 +147,37 @@ so an approximate block tail remains visible in the combined result's label.
 The quadrature callbacks execute in C; SciPy still controls integration with the
 same formulas, tolerances, error checks, and fallback rules above. The sine and
 cosine callbacks share a bounded cache of 4,096 nodes, keyed by the exact double
-representation. Revisited nodes reuse both components; hash collisions trigger
-recomputation. There is no interpolation or change to QUADPACK's node selection
+representation. Revisited nodes reuse both components; up to eight bounded
+probes resolve hash collisions before replacement and recomputation. There is
+no interpolation or change to QUADPACK's node selection
 or error estimates. The approximately 96 KiB cache lives only for that integral.
 
 Plain whitespace GWAS tables pass through a native reference-SNP filter, then
-bounded string-array chunks and decimal conversion. Pandas is imported only
-for general table syntax or output merging. Both input paths retain ordered QC,
-source row counts, and the same missing-value rules. Decimal strings convert
-straight to float64 before the existing sample-size rounding and QC rules.
+bounded string-array chunks and native decimal conversion through CPython's
+float parser. Pandas is imported only for general table syntax or output
+merging. Both paths feed one input-QC implementation, preserving source row
+counts, duplicate order, missing-value rules, and sample-size rounding. Native
+filtering uses byte-key membership checks before parsing matched numeric fields.
+
+Gene annotations are streamed one gene at a time during analysis. Numerical
+integration is imported after input loading so initialization does not overlap
+with temporary parsing buffers.
 
 The BIM file is streamed into one reference-order SNP lookup shared by
 annotation mapping and trait input. Unused PLINK metadata arrays are not
 materialized. Genotype normalization modifies only newly owned read buffers;
 the public normalization helper still copies its input. Complete blocks retain
 no missing-call mask, and gene assembly avoids a final copy when all selected
-SNPs pass QC. The default parsing chunk is 32,768 retained rows and the genotype
-cache is 8 MiB; neither changes the statistical gene blocks.
+SNPs pass QC. Genes contained in one cached block select their retained columns
+directly into an independent result array.
+
+For complete genotypes, BLAS SYRK forms only the lower Gram triangle in Fortran
+layout. LAPACK's `dsyevr` computes its eigenvalues, using the same solver as the
+previous high-level symmetric eigensolver. Optimal workspace sizes are cached
+for at most 256 matrix dimensions; matrix work buffers are not retained. Missing
+calls still use the full adjusted SNP correlation matrix before eigendecomposition.
+The default parsing chunk is 32,768 retained rows and the genotype cache is
+8 MiB; neither changes the statistical gene blocks.
 
 ## Output interpretation
 

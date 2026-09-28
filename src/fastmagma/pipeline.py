@@ -3,7 +3,7 @@
 from collections import Counter
 import csv
 import hashlib
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, closing, contextmanager
 from importlib.metadata import version
 import json
 import logging
@@ -17,12 +17,11 @@ from bed_reader import open_bed
 import numpy as np
 from threadpoolctl import threadpool_limits
 
-from .blocks import prepare_gene
 from .genotypes import GenotypeReader, workspace_bytes
 from .io import (
     COLUMNS,
     TraitStore,
-    load_annotation,
+    iter_annotation,
     load_reference_index,
     parse_chromosomes,
     parse_traits,
@@ -133,9 +132,7 @@ def run_chromosome(args):
         raise ValueError(
             f"The {model} model requires at least {minimum_samples} reference individuals"
         )
-    genes = load_annotation(args.annot, chrom)
-    if not any((snps.get_indexer(gene.snps) >= 0).any() for gene in genes):
-        raise ValueError("No annotated SNPs occur in the reference panel")
+    annotated_reference = False
     reader = GenotypeReader(bed, args.cache_mb, args.block_snps, args.threads)
     counts = {t: 0 for t in traits}
     methods = {t: Counter() for t in traits}
@@ -146,6 +143,9 @@ def run_chromosome(args):
         store = TraitStore(scratch, traits, snps, model=model)
         try:
             store.load(args.pval_dir, args.chunk_rows)
+            # Initialize numerical integration after input buffers are released.
+            from .blocks import prepare_gene
+
             available = np.zeros(len(snps), dtype=bool)
             for t in range(len(traits)):
                 available |= np.isfinite(store.values[t, 0])
@@ -158,11 +158,13 @@ def run_chromosome(args):
                         writer = csv.writer(fh, delimiter="\t")
                         writer.writerow(COLUMNS)
                         writers.append(writer)
+                    genes = stack.enter_context(closing(iter_annotation(args.annot, chrom)))
                     for gene_number, gene in enumerate(genes, 1):
                         if gene_number % 100 == 0:
-                            LOG.info("Chromosome %s: gene %s/%s", chrom, gene_number, len(genes))
+                            LOG.info("Chromosome %s: gene %s", chrom, gene_number)
                         ids = snps.get_indexer(gene.snps)
                         ids = np.unique(ids[ids >= 0])
+                        annotated_reference |= bool(len(ids))
                         # Avoid genotype work for SNPs absent in all traits.
                         ids = ids[available[ids]]
                         if not len(ids):
@@ -221,6 +223,8 @@ def run_chromosome(args):
                                 )
                                 counts[traits[t]] += 1
                                 methods[traits[t]][result.method] += 1
+                if not annotated_reference:
+                    raise ValueError("No annotated SNPs occur in the reference panel")
                 empty = [t for t, count in counts.items() if not count]
                 if empty:
                     raise ValueError(f"No polymorphic gene results for traits: {','.join(empty)}")

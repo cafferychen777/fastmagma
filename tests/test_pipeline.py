@@ -279,3 +279,34 @@ def test_reference_order_deduplicates_annotation_and_ignores_unneeded_metadata(i
     )
     assert main(args + ["--overwrite"]) == 0
     assert (p / "out/a.chr22.fastmagma.tsv").read_bytes() == expected
+
+
+@pytest.mark.parametrize("late_line", ["malformed\n", "001\t22:10:12\trs1\n"])
+def test_late_annotation_failure_preserves_published_outputs(inputs, late_line):
+    root, args = inputs
+    assert main(args) == 0
+    output = root / "out"
+    before = {path.name: path.read_bytes() for path in output.iterdir() if path.is_file()}
+    annotation = root / "genes.annot"
+    annotation.write_text(annotation.read_text() + late_line)
+    assert main(args + ["--overwrite"]) == 1
+    after = {path.name: path.read_bytes() for path in output.iterdir() if path.is_file()}
+    assert before == after
+    assert not list(output.glob(".fastmagma-*"))
+
+
+@pytest.mark.parametrize(
+    "annotation,error",
+    [
+        ("G1\t1:1:3\trs0\n", "No genes annotated on chromosome 22"),
+        ("G1\t22:1:3\tabsent\n", "No annotated SNPs occur in the reference panel"),
+    ],
+)
+def test_streamed_annotation_empty_or_absent_reference(inputs, annotation, error, capsys):
+    root, args = inputs
+    (root / "genes.annot").write_text(annotation)
+    assert main(args) == 1
+    assert error in capsys.readouterr().err
+    assert not list((root / "out").glob("*.tsv"))
+    assert not list((root / "out").glob("*.manifest.json"))
+    assert not list((root / "out").glob(".fastmagma-*"))
