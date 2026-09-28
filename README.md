@@ -143,24 +143,24 @@ fastmagma avoids repeating the same LD work across traits. It also uses the
 smaller of the sample-space and SNP-space Gram matrices for complete-data
 correlation spectra; missing-call correction uses the SNP-space matrix.
 
-Native numerical callbacks, exact-node reuse, streaming input, and fewer array
-copies reduced runtime by **4.5–8.5×** versus the original implementation in five
-chromosome-22 workloads. The latest round further reduced prefiltered single-CAD
-runtime from **7.08 to 5.22 seconds** and peak memory from **257 to 155 MiB**;
-single AD fell from **3.37 to 2.43 seconds** and **216 to 136 MiB**.
+Native numerical callbacks, streaming input and annotations, and reduced matrix
+overhead made five chromosome-22 workloads **5.0–9.2×** faster than the original
+implementation. In a direct rerun against the previous optimized release in the
+same allocation, single CAD improved from **5.11 to 4.76 seconds** and
+**154 to 138 MiB**; AD improved from **2.38 to 2.27 seconds** and
+**134 to 117 MiB**. All five workloads improved in both median runtime and peak RSS.
 
 With one CPU/thread and three repetitions, paired **MAGMA v1.10** (`--genes-only`)
-remained faster for these prefiltered single traits: **4.28 seconds** for CAD and
-**1.34 seconds** for AD. From the original full GWAS input files, the CAD/AD pair
-took **8.86 seconds** with fastmagma versus **11.35 seconds** with MAGMA.
-fastmagma still used more memory (**174 versus 24 MiB** for that pair).
+still ran the single traits faster: **4.20 seconds** for CAD and **1.32 seconds**
+for AD, using about **24 and 16 MiB**. From the original full GWAS input files,
+the CAD/AD pair took **8.46 seconds** with fastmagma versus **11.37 seconds** with
+MAGMA. This workload-specific advantage does not imply a general speedup.
 
-The statistical model and requested integration accuracy are unchanged. Output
-checks retained gene sets and SNP/parameter/sample counts; maximum absolute Z
-change versus the original implementation was **1.9e-9**, with matching numerical
-method labels for every gene. See the [runtime report](docs/PERFORMANCE.md) for
-ranges, remaining bottlenecks, separately labeled multi-trait controls, and
-numerical checks.
+The statistical model and requested integration accuracy are unchanged. Checks
+retained gene sets, SNP/parameter/sample counts, and numerical method labels;
+maximum absolute Z change versus the original implementation was **1.9e-9**.
+See the [runtime report](docs/PERFORMANCE.md) for all repetitions, same-allocation
+controls, remaining bottlenecks, and numerical checks.
 
 In a synthetic benchmark with **150 reference samples and 1,500 SNPs**, the
 smaller-matrix calculation took **0.95 ms**, compared with **188 ms** for the

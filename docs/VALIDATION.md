@@ -67,9 +67,9 @@ effective parameter count, not necessarily the retained spectral rank.
 ## Official executable boundary checks
 
 `benchmarks/validate_boundaries.py` constructs PLINK fixtures and runs both CLIs.
-The initial 28 cases passed in jobs `2680538` and `2695162`. The lean-input
-revision repeated these and eight adjacent half-boundary cases in job
-`2695470`: both programs accepted the same **29 cases** and rejected the same
+The initial 28 cases were extended with eight adjacent half-boundary cases.
+The current streamed-annotation and native-parser revision repeated all 36 in job
+`2695498`: both programs accepted the same **29 cases** and rejected the same
 **seven cases** (negative/NaN P, NaN/infinite N, and three negative N values at
 or immediately around -0.5). Exit-code numbers differ; rejection behavior
 agrees. All accepted cases have exact gene/NSNPS/NPARAM/N agreement; maximum
@@ -110,27 +110,36 @@ preserves much smaller tails. See [algorithm scope](ALGORITHM.md).
 
 ## Engineering and package checks
 
-The current suite has 344 tests. Coverage includes bounded genotype caching,
+The current suite has 367 tests. Coverage includes bounded genotype caching,
 missing-call LD and non-positive-semidefinite spectra, block boundaries and
 Brown limits, chunk-independent input ordering, trait-specific SNP masks,
 reuse of prepared spectra, input validation, resource guards, atomic output
 publication, concurrent chromosome locks, checksums and model-revision-safe
 merges. The whole-gene mode retains its separate historical input policy.
 
-All 344 tests passed locally on Python 3.12 and against independently compiled
+All 367 tests passed locally on Python 3.12 and against independently compiled
 source installations on Python 3.10 (minimum dependencies), 3.11, 3.12, 3.13 and
-3.14 at production commit `831f66a`. Installed-package tests ran outside the
+3.14 at production commit `6b43874`. Installed-package tests ran outside the
 checkout. Native callback checks cover the original NumPy formulas, capsule
 lifetime, invalid buffers, bounded node reuse, and retry without relaxing the
 error gate. Input checks compare native filtering with the general parser,
 verify that normal input loading does not import pandas, and exercise decimal
-conversion and adjacent half-boundary values. Ruff and strict Twine checks pass.
+conversion and adjacent half-boundary values. The native decimal parser matches
+the preceding Python converter on 1,022 tokens: non-NaN float64 bit patterns
+(including signed zero and infinities) and NaN classification agree. Buffer
+tests cover incorrect shape/type/length, read-only and unaligned destinations,
+and nonnumeric Unicode. Filtering accepts sequences or mapping keys and
+preserves identical rows without mutating the input. Streaming annotation
+checks preserve parser output and ensure late malformed/duplicate rows cannot
+replace published results. These tests are separate from the earlier
+38-input pandas comparison, which intentionally retains its documented
+half-boundary compatibility difference. Ruff and strict Twine checks pass.
 The minimum dependency set is NumPy 1.24.0, pandas 2.0.0, SciPy 1.10.0,
 bed-reader 1.0.0 and threadpoolctl 3.1.0.
 
-Hosted [CI run 36453307630](https://github.com/cafferychen777/fastmagma/actions/runs/36453307630)
+Hosted [CI run 36457729357](https://github.com/cafferychen777/fastmagma/actions/runs/36457729357)
 passed all 15 Linux/macOS/Windows and Python 3.10–3.14 combinations, including
-installed-wheel tests, plus the minimum-dependency job at `831f66a`.
+installed-wheel tests, plus the minimum-dependency job at `6b43874`.
 
 A Linux regression check also evaluated AD gene 56702 against independent
 50- and 80-digit de Hoog and Talbot inversion. The final result,
@@ -205,7 +214,7 @@ python benchmarks/validate_block_compatibility.py \
 ```
 
 Local evidence is under `results/boundary_validation/`, `results/final_validation/`
-`results/single_final_boundaries/`, and `results/algorithm_diagnostic/`.
+`results/r4_boundary_validation/`, and `results/algorithm_diagnostic/`.
 Results and datasets are not distributed.
 Private run manifests record input paths, sizes and mtimes; published output
 files are checked by SHA-256. Obsolete diagnostic scripts are retained only

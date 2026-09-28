@@ -1,92 +1,104 @@
 # Runtime comparison with MAGMA
 
-Two optimization rounds removed Python quadrature callbacks, redundant parsing
-and indexing, unnecessary genotype copies, and repeated evaluation at identical
-integration nodes. The current implementation (R2) reduced runtime by
-**4.52–8.47×** against the original fastmagma baseline across five chromosome-22
-workloads, without changing the statistical model or requested integration accuracy.
+The current implementation (commit `6b43874`) improves both runtime and peak
+memory against the previous optimized release, R2, when rerun in the same
+compute allocation. Prefiltered single CAD fell from **5.11 to 4.76 s** and
+**154 to 138 MiB**; AD fell from **2.38 to 2.27 s** and **134 to 117 MiB**.
+These are approximately **7% and 5% less elapsed time**, respectively, with
+**10% and 13% less peak RSS**. All five workloads improved in both median
+runtime and peak memory, including the full original GWAS inputs.
 
-The second round directly improved prefiltered single-trait analysis: CAD fell
-from **7.08 to 5.22 s**, with peak RSS from **257 to 155 MiB**; AD fell from
-**3.37 to 2.43 s**, with RSS from **216 to 136 MiB**. These are approximately
-**26–28% less time and 37–40% less peak memory** than R1. MAGMA remained faster
-and smaller for these single-trait workloads: **4.28 s / 25 MiB** for CAD and
-**1.34 s / 16 MiB** for AD.
+MAGMA remained faster and smaller for the single traits: **4.20 s / 24 MiB**
+for CAD and **1.32 s / 16 MiB** for AD. The different-SNP pair was close to
+parity. For the full original GWAS pair, fastmagma took **8.46 s** versus
+MAGMA's **11.37 s**, a **1.34×** speed ratio on this workload. These results
+do not establish a general speed advantage over MAGMA.
 
-For the full original GWAS input pair, R2 took **8.86 s** versus paired MAGMA's
-**11.35 s**, a **1.28×** speed ratio on this workload. This does not establish
-a universal speed advantage. All four prefiltered workloads remained slower
-than MAGMA, and fastmagma retained higher process memory throughout.
+## Same-allocation comparison
 
-R2 results are from job `2695477` at production commit `831f66a`; R1 results
-are from job `2695169` and match production commit `403f765`. The separate extended multi-trait results below
-use R1, not R2.
+Job `2695497` ran current fastmagma, previous R2 fastmagma, and MAGMA on node
+`c03` with the same one-CPU allocation, inputs, thread settings, cache warming,
+and fresh-process measurement. Previous/current execution order alternated
+across three repetitions for every workload. Wall seconds below are medians,
+with observed ranges in brackets.
 
-## Results
-
-Wall seconds are medians over three repetitions, with observed ranges in
-brackets. Baseline, R1, and R2 were separate jobs on the same node; MAGMA was
-remeasured alongside R2. Historical before/after ratios are not concurrent
-paired estimates.
-
-| Workload | Original fastmagma | R1 fastmagma | Current R2 fastmagma | Paired MAGMA |
-| --- | ---: | ---: | ---: | ---: |
-| Single CAD | 23.58 [23.36–23.71] | 7.08 [7.00–7.18] | 5.22 [5.17–5.42] | 4.28 [4.26–4.31] |
-| Single AD | 14.70 [14.58–14.97] | 3.37 [3.30–3.39] | 2.43 [2.40–2.44] | 1.34 [1.33–1.36] |
-| Shared SNP pair | 25.78 [25.37–26.42] | 4.06 [4.02–4.07] | 3.04 [3.04–3.05] | 2.68 [2.68–2.68] |
-| Different SNP pair | 35.99 [34.95–36.97] | 7.80 [7.71–7.86] | 6.14 [6.01–6.15] | 5.56 [5.55–5.63] |
-| Full GWAS pair | 57.28 [56.77–58.04] | 10.94 [10.84–10.94] | 8.86 [8.80–8.89] | 11.35 [11.32–11.41] |
+| Workload | Previous R2 fastmagma | Current fastmagma | Paired MAGMA |
+| --- | ---: | ---: | ---: |
+| Single CAD | 5.11 [5.10–5.13] | 4.76 [4.74–4.79] | 4.20 [4.20–4.24] |
+| Single AD | 2.38 [2.36–2.45] | 2.27 [2.23–2.28] | 1.32 [1.32–1.34] |
+| Shared SNP pair | 2.94 [2.92–2.96] | 2.81 [2.80–2.82] | 2.65 [2.64–2.67] |
+| Different SNP pair | 6.02 [5.95–6.03] | 5.59 [5.57–5.63] | 5.53 [5.52–5.61] |
+| Full GWAS pair | 8.86 [8.80–9.22] | 8.46 [8.43–8.56] | 11.37 [11.29–11.95] |
 
 Peak RSS in MiB is the median of each repetition's process peak, with observed
 ranges. A serial multi-trait run uses its largest process peak, not their sum.
 
-| Workload | Original fastmagma | R1 fastmagma | Current R2 fastmagma | Paired MAGMA |
-| --- | ---: | ---: | ---: | ---: |
-| Single CAD | 382.31 [381.62–386.33] | 257.27 [255.71–259.38] | 154.60 [153.62–155.96] | 24.60 [23.60–25.39] |
-| Single AD | 354.16 [353.27–355.27] | 216.10 [214.98–220.20] | 135.52 [132.00–136.04] | 16.09 [15.12–16.43] |
-| Shared SNP pair | 359.23 [358.84–360.75] | 226.30 [225.52–227.37] | 140.32 [138.86–141.46] | 15.29 [15.00–16.55] |
-| Different SNP pair | 391.28 [390.36–394.86] | 262.50 [259.67–263.97] | 177.71 [177.36–178.95] | 23.88 [23.82–25.32] |
-| Full GWAS pair | 411.21 [409.89–415.25] | 262.20 [259.67–262.75] | 174.33 [172.33–175.07] | 24.45 [24.41–25.10] |
+| Workload | Previous R2 fastmagma | Current fastmagma | Paired MAGMA |
+| --- | ---: | ---: | ---: |
+| Single CAD | 153.64 [153.64–157.10] | 138.16 [134.89–139.52] | 24.05 [23.00–24.58] |
+| Single AD | 134.03 [131.48–134.35] | 116.76 [115.77–119.62] | 15.77 [15.42–16.12] |
+| Shared SNP pair | 138.00 [137.50–140.40] | 122.94 [122.62–123.03] | 15.97 [15.86–16.34] |
+| Different SNP pair | 173.98 [168.77–177.94] | 155.13 [153.51–160.48] | 23.93 [22.95–25.32] |
+| Full GWAS pair | 171.85 [171.76–174.62] | 158.06 [155.66–158.38] | 25.23 [23.54–25.32] |
 
-The R2 shared pair took **3.04 s** batched versus **4.85 s** in two independent
-fastmagma processes: a **1.59×** within-program speedup, or **37.3% less elapsed
+No repetition is discarded. The full-input control is included specifically to
+check that single-trait and memory optimizations do not hide a genome-wide
+input-scanning regression: its median improved from **8.86 to 8.46 s**.
+Earlier kernel-only savings did not reduce end-to-end RSS; streaming annotations
+and delaying analysis imports until input loading finished produced the memory
+reduction reported here.
+
+The shared pair took **2.81 s** batched versus **4.53 s** in two independent
+fastmagma processes: a **1.61×** within-program speedup, or **37.9% less elapsed
 time**. Eigendecompositions fell from **2,206 to 1,103** in every repetition.
-This demonstrates reuse, but the timing benefit also includes avoided startup,
+This demonstrates reuse, but its timing benefit also includes avoided startup,
 imports, and input work.
+
+Relative to the original implementation in historical job `2695039`, current
+median runtimes are **4.95–9.17×** faster across the five workloads. That baseline
+ran on the same node in a separate allocation; these historical ratios are not
+concurrent paired estimates. The tables above use the more recent R2 release
+as their directly remeasured control.
 
 ## Bottlenecks and changes
 
-The baseline filtered-CAD profile (job `2695103`) spent **21.974 s** of **29.202 s**
+The original filtered-CAD profile (job `2695103`) spent **21.974 s** of **29.202 s**
 in `tilted_logsf`, with approximately **1.87 million** Python integrand callbacks.
-All eigendecompositions together took only **1.032 s**. Optimizing eigenvalues
-alone could not address the dominant cost.
+All eigendecompositions together took only **1.032 s**. Native callbacks and
+bounded exact-node reuse removed much of that overhead. Cache collisions cause
+a lookup or recomputation; values are never interpolated and error criteria
+are not relaxed.
 
-R1 moved the unchanged callback formulas into C. R2 additionally caches both
-Fourier components at exactly matching quadrature nodes in a bounded shared
-cache. Hash collisions cause recomputation; there is no interpolation or
-relaxation of error estimates. The R2 CAD profile took **6.347 s**, including
-**1.363 s** in `tilted_logsf`, **1.503 s** in correlation spectra, **0.912 s** in
-genotype reads, and **0.719 s** in imports. The corresponding R1 tilted-integration
-time was **2.207 s**. Profile times include instrumentation overhead and nested
-calls; they must not be added or substituted for the uninstrumented table.
+The current CAD profile took **5.734 s**, including **1.252 s** in `tilted_logsf`,
+**1.389 s** in correlation spectra, **0.878 s** in genotype reads, and **0.697 s**
+in imports. The preceding R2 profile took **6.347 s**, including **1.363 s** in
+`tilted_logsf` and **1.503 s** in correlation spectra. These separate profiles
+include instrumentation overhead and nested calls; their times must not be
+added or substituted for the paired uninstrumented measurements.
 
-Plain input tables now use bounded array chunks without importing pandas;
-unusual CSV syntax retains the general parser. Reference filtering preserves
-original row counts and the existing QC rules. A single dictionary owns SNP
-lookup and ordering, while the BIM reader skips unused metadata. Genotype
-normalization reuses the owned decode buffer; complete blocks need no missing
-mask, and retained gene matrices avoid redundant copies. Default parser chunks
-remain 32,768 retained rows and the genotype cache remains 8 MiB. These execution
-changes do not alter statistical SNP blocks or selection rules.
+Plain input tables use bounded chunks without importing pandas; unusual CSV
+syntax retains the general parser. Reference filtering preserves original row
+counts and QC rules. Numeric conversion writes directly into its destination
+array in C. A single reference lookup avoids duplicate metadata arrays.
+Gene annotations stream through validation and analysis instead of retaining
+all SNP strings. Analysis imports occur after input loading so their memory
+does not overlap the parser's peak temporary allocations.
+
+Genotype normalization reuses the owned decode buffer; complete blocks need
+no missing mask, and the single-cache-block path removes an intermediate copy.
+The eigenvalue calculation forms only the required Gram triangle and calls the
+same LAPACK solver directly with cached workspace sizes. Defaults remain
+32,768 retained input rows per chunk and an 8 MiB genotype cache. The statistical
+model, SNP selection, integration tolerances, and fallback criteria are unchanged.
 
 An independent 35-case two-weight integration check had maximum relative
-probability error **1.36e-12**. Across all five real workloads, R2 and original
-fastmagma outputs retained identical gene sets, NSNPS, NPARAM, and N. The largest
-absolute Z change was **1.88e-9** and the largest absolute P change **6.75e-10**.
-PMETHOD labels also matched for every gene. If shared-node quadrature misses
-its error criterion, the same integral is retried uncached at the same tolerances
-before considering the existing numerical fallbacks. These checks support close
-numerical agreement on the tested cases, not a universal error bound.
+probability error **1.36e-12**. Across all five real workloads, current and
+original fastmagma outputs retained identical gene sets, NSNPS, NPARAM, N, and
+PMETHOD. The largest absolute Z change was **1.88e-9** and the largest absolute
+P change **6.75e-10**. If shared-node quadrature misses its error criterion, the
+same integral is retried uncached at the same tolerances before the existing
+numerical fallbacks. These checks support close numerical agreement on the
+tested cases, not a universal error bound.
 
 ## Workloads
 
@@ -120,13 +132,12 @@ input handling, and other shared work; it cannot all be attributed to LD reuse.
 
 ## Measurement
 
-- Arseven Slurm jobs `2695039` (baseline), `2695169` (R1), and `2695477` (R2), node `c03`:
-  one allocated CPU and a 3 GiB memory limit per job.
-- Recorded CPU affinity was logical CPUs `21,149` for the baseline, `25,153`
-  for R1, and `3,131` for R2
-  exposed by the allocation. One thread is configured for fastmagma and the
-  BLAS/OpenMP environment of both programs.
-  MAGMA is invoked as a single process per trait.
+- Arseven Slurm job `2695497`, node `c03`: one allocated CPU and a 3 GiB memory
+  limit. R2 and current fastmagma were both run within this allocation for all
+  five workloads, alongside MAGMA.
+- Recorded CPU affinity was logical CPUs `2,130`. One thread is configured for
+  fastmagma and the BLAS/OpenMP environment of both programs. MAGMA uses one
+  process per trait.
 - Three paired repetitions per workload. MAGMA and fastmagma run in alternating
   order; the shared-input serial control rotates through the three positions.
   Benchmark processes run serially within the allocation.
@@ -193,7 +204,7 @@ The completed sparse experiment (job `2695160`, node `c03`) used **R1** and
 427 common usable SNPs across CAD, LDL, T2D, BMI, TG, SCZ, SBP, and DBP. Groups
 of 1, 2, 4, and 8 traits use prefixes of this list on the same fixed SNP set,
 retaining each trait's observed P/N values. Preparation is outside timing.
-These measurements must not be combined with R2 timings as one scaling curve.
+These measurements must not be combined with current timings as one scaling curve.
 
 | Traits | R1 fastmagma, seconds | MAGMA, seconds | R1 fastmagma peak MiB | MAGMA peak MiB |
 | --- | ---: | ---: | ---: | ---: |
